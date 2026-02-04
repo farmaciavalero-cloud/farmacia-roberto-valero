@@ -5,7 +5,7 @@ const AppointmentsPage: React.FC = () => {
     const [service, setService] = useState('');
     const [date, setDate] = useState('');
     const [time, setTime] = useState('');
-    const [busySlots, setBusySlots] = useState<any[]>([]);
+    const [busySlots, setBusySlots] = useState<{fecha: string, hora: string}[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitSuccess, setSubmitSuccess] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -27,22 +27,21 @@ const AppointmentsPage: React.FC = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // FUNCIÓN PARA CARGAR LAS CITAS YA EXISTENTES
-    const fetchBusySlots = async () => {
-        const { data } = await supabase.from('citas').select('fecha, hora');
-        if (data) setBusySlots(data);
+    // FUNCIÓN CRÍTICA: Carga las citas y fuerza el formato YYYY-MM-DD
+    const fetchOccupiedSlots = async () => {
+        const { data, error: fetchError } = await supabase
+            .from('citas')
+            .select('fecha, hora');
+        
+        if (data) {
+            console.log("Citas recuperadas:", data);
+            setBusySlots(data);
+        }
     };
 
     useEffect(() => {
-        fetchBusySlots();
+        fetchOccupiedSlots();
     }, []);
-
-    // Comprobar si un día tiene todas las horas ocupadas
-    const isDayFull = (day: number) => {
-        const dateStr = `2026-02-${day.toString().padStart(2, '0')}`;
-        const count = busySlots.filter(s => s.fecha === dateStr).length;
-        return count >= timeSlots.length;
-    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -55,22 +54,27 @@ const AppointmentsPage: React.FC = () => {
 
             const { data: profile } = await supabase.from('profiles').select('full_name, phone').eq('id', user.id).single();
 
-            // Guardamos con los nombres de columna correctos
+            const dateStr = `2026-02-${date.padStart(2, '0')}`;
+
             const { error: insertError } = await supabase.from('citas').insert([{ 
                 user_id: user.id,
                 nombre_paciente: profile?.full_name || 'Usuario App',
                 telefono_paciente: profile?.phone || '',
                 servicio: service,
-                fecha: `2026-02-${date.padStart(2, '0')}`,
+                fecha: dateStr,
                 hora: time
             }]);
 
-            if (insertError) throw insertError;
-            
-            await fetchBusySlots();
+            if (insertError) {
+                if (insertError.code === '23505') throw new Error("¡Vaya! Alguien se te ha adelantado. Elige otra hora.");
+                throw insertError;
+            }
+
             setSubmitSuccess(true);
+            fetchOccupiedSlots(); // Actualizamos la lista tras el éxito
         } catch (err: any) {
             setError(err.message);
+            fetchOccupiedSlots(); // Si falla, refrescamos por si acaso
         } finally {
             setIsSubmitting(false);
         }
@@ -78,24 +82,23 @@ const AppointmentsPage: React.FC = () => {
 
     const renderCalendar = () => {
         const days = [];
+        // Febrero 2026 empieza en Domingo (6 huecos si empezamos por Lunes)
         for (let i = 0; i < 6; i++) days.push(<div key={`empty-${i}`} className="w-10 h-10"></div>);
 
         for (let d = 1; d <= 28; d++) {
             const currentDate = new Date(2026, 1, d);
             const isPast = currentDate < today;
-            const full = isDayFull(d);
             const isSelected = date === d.toString();
             
-            // Lógica de colores del calendario
-            const isDisabled = isPast || full;
-            const circleClass = isDisabled 
+            // Estilo de círculos según disponibilidad
+            const circleClass = isPast 
                 ? "bg-gray-100 text-gray-300 cursor-not-allowed" 
                 : isSelected 
                     ? "bg-brand-green text-white scale-110 shadow-lg" 
                     : "bg-black text-white hover:bg-slate-800 cursor-pointer shadow-md";
 
             days.push(
-                <button key={d} type="button" disabled={isDisabled} onClick={() => setDate(d.toString())}
+                <button key={d} type="button" disabled={isPast} onClick={() => setDate(d.toString())}
                     className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-black transition-all ${circleClass}`}>
                     {d}
                 </button>
@@ -108,8 +111,8 @@ const AppointmentsPage: React.FC = () => {
         return (
             <div className="p-10 text-center animate-in fade-in zoom-in duration-500">
                 <div className="text-6xl mb-6">✨</div>
-                <h2 className="text-2xl font-black mb-2 text-white italic">¡Cita Guardada!</h2>
-                <button onClick={() => setSubmitSuccess(false)} className="w-full py-4 bg-brand-green text-white rounded-2xl font-bold mt-4 shadow-xl">Pedir otra</button>
+                <h2 className="text-2xl font-black mb-2 text-white italic">¡Cita Confirmada!</h2>
+                <button onClick={() => setSubmitSuccess(false)} className="w-full py-4 bg-brand-green text-white rounded-2xl font-bold mt-4">Pedir otra cita</button>
             </div>
         );
     }
@@ -119,7 +122,7 @@ const AppointmentsPage: React.FC = () => {
             {error && <div className="p-4 bg-red-500/10 text-red-500 rounded-2xl text-[10px] font-black uppercase text-center border border-red-500/20">{error}</div>}
 
             <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2 italic">Servicio Farmacéutico</label>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2">Servicio</label>
                 <select required value={service} onChange={(e) => setService(e.target.value)}
                     className="w-full p-5 bg-slate-900 border-none rounded-[1.5rem] text-white shadow-2xl appearance-none">
                     <option value="">¿Cómo podemos ayudarte?</option>
@@ -138,11 +141,12 @@ const AppointmentsPage: React.FC = () => {
             </div>
 
             {date && (
-                <div className="space-y-4 animate-in slide-in-from-bottom-8 duration-500">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center block italic">Franja Horaria</label>
+                <div className="space-y-4 animate-in slide-in-from-bottom-8">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center block">Horas Libres</label>
                     <div className="grid grid-cols-4 gap-2">
                         {timeSlots.map(t => {
                             const dateStr = `2026-02-${date.padStart(2, '0')}`;
+                            // COMPARACIÓN EXACTA: Buscamos si la combinación fecha+hora ya existe
                             const isBusy = busySlots.some(s => s.fecha === dateStr && s.hora === t);
                             
                             return (
@@ -154,7 +158,7 @@ const AppointmentsPage: React.FC = () => {
                                             ? 'bg-brand-green text-white border-brand-green shadow-lg scale-95' 
                                             : 'bg-slate-800/40 text-white border-transparent hover:bg-slate-700'
                                     }`}>
-                                    {isBusy ? 'Cerrado' : t}
+                                    {isBusy ? 'Ocupado' : t}
                                 </button>
                             );
                         })}
@@ -163,7 +167,7 @@ const AppointmentsPage: React.FC = () => {
             )}
 
             <button type="submit" disabled={isSubmitting || !date || !time || !service}
-                className="w-full py-6 bg-brand-green text-white rounded-[2rem] font-black text-lg shadow-2xl shadow-brand-green/30 disabled:bg-slate-800 transition-all uppercase tracking-[0.2em] active:scale-95">
+                className="w-full py-6 bg-brand-green text-white rounded-[2rem] font-black text-lg shadow-2xl disabled:bg-slate-800 transition-all uppercase tracking-[0.2em] active:scale-95">
                 {isSubmitting ? 'Confirmando...' : 'Confirmar Cita'}
             </button>
         </form>
