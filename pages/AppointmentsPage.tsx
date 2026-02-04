@@ -5,7 +5,7 @@ const AppointmentsPage: React.FC = () => {
     const [service, setService] = useState('');
     const [date, setDate] = useState('');
     const [time, setTime] = useState('');
-    const [busySlots, setBusySlots] = useState<{fecha: string, hora: string}[]>([]);
+    const [busySlots, setBusySlots] = useState<any[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitSuccess, setSubmitSuccess] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -27,21 +27,18 @@ const AppointmentsPage: React.FC = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // FUNCIÓN CRÍTICA: Carga las citas y fuerza el formato YYYY-MM-DD
-    const fetchOccupiedSlots = async () => {
-        const { data, error: fetchError } = await supabase
-            .from('citas')
-            .select('fecha, hora');
-        
+    // FUNCIÓN PARA CARGAR TODAS LAS CITAS DEL MES
+    const fetchOccupied = async () => {
+        const { data } = await supabase.from('citas').select('fecha, hora');
         if (data) {
-            console.log("Citas recuperadas:", data);
+            console.log("Datos de Supabase:", data);
             setBusySlots(data);
         }
     };
 
     useEffect(() => {
-        fetchOccupiedSlots();
-    }, []);
+        fetchOccupied();
+    }, [date]); // Se refresca cada vez que eliges un día
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -66,15 +63,14 @@ const AppointmentsPage: React.FC = () => {
             }]);
 
             if (insertError) {
-                if (insertError.code === '23505') throw new Error("¡Vaya! Alguien se te ha adelantado. Elige otra hora.");
+                if (insertError.code === '23505') throw new Error("¡VAYA! ALGUIEN SE TE HA ADELANTADO. ELIGE OTRA HORA.");
                 throw insertError;
             }
 
             setSubmitSuccess(true);
-            fetchOccupiedSlots(); // Actualizamos la lista tras el éxito
         } catch (err: any) {
-            setError(err.message);
-            fetchOccupiedSlots(); // Si falla, refrescamos por si acaso
+            setError(err.message.toUpperCase());
+            fetchOccupied(); // Forzamos refresco si falla
         } finally {
             setIsSubmitting(false);
         }
@@ -82,7 +78,6 @@ const AppointmentsPage: React.FC = () => {
 
     const renderCalendar = () => {
         const days = [];
-        // Febrero 2026 empieza en Domingo (6 huecos si empezamos por Lunes)
         for (let i = 0; i < 6; i++) days.push(<div key={`empty-${i}`} className="w-10 h-10"></div>);
 
         for (let d = 1; d <= 28; d++) {
@@ -90,12 +85,11 @@ const AppointmentsPage: React.FC = () => {
             const isPast = currentDate < today;
             const isSelected = date === d.toString();
             
-            // Estilo de círculos según disponibilidad
             const circleClass = isPast 
-                ? "bg-gray-100 text-gray-300 cursor-not-allowed" 
+                ? "bg-gray-100 text-gray-300 cursor-not-allowed" // Días pasados en gris
                 : isSelected 
                     ? "bg-brand-green text-white scale-110 shadow-lg" 
-                    : "bg-black text-white hover:bg-slate-800 cursor-pointer shadow-md";
+                    : "bg-black text-white hover:bg-slate-800 cursor-pointer shadow-md"; // Disponibles en negro
 
             days.push(
                 <button key={d} type="button" disabled={isPast} onClick={() => setDate(d.toString())}
@@ -110,29 +104,29 @@ const AppointmentsPage: React.FC = () => {
     if (submitSuccess) {
         return (
             <div className="p-10 text-center animate-in fade-in zoom-in duration-500">
-                <div className="text-6xl mb-6">✨</div>
-                <h2 className="text-2xl font-black mb-2 text-white italic">¡Cita Confirmada!</h2>
-                <button onClick={() => setSubmitSuccess(false)} className="w-full py-4 bg-brand-green text-white rounded-2xl font-bold mt-4">Pedir otra cita</button>
+                <div className="text-6xl mb-6 text-brand-green">✓</div>
+                <h2 className="text-2xl font-black mb-2 text-white italic tracking-tighter">¡CITA REGISTRADA!</h2>
+                <button onClick={() => window.location.reload()} className="w-full py-4 bg-brand-green text-white rounded-2xl font-bold mt-4 shadow-xl">CERRAR</button>
             </div>
         );
     }
 
     return (
         <form onSubmit={handleSubmit} className="p-4 space-y-8 pb-24">
-            {error && <div className="p-4 bg-red-500/10 text-red-500 rounded-2xl text-[10px] font-black uppercase text-center border border-red-500/20">{error}</div>}
+            {error && <div className="p-4 bg-red-900/40 text-red-200 rounded-2xl text-[11px] font-black text-center border border-red-500/30 animate-pulse">{error}</div>}
 
             <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2">Servicio</label>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] ml-2">Servicio</label>
                 <select required value={service} onChange={(e) => setService(e.target.value)}
-                    className="w-full p-5 bg-slate-900 border-none rounded-[1.5rem] text-white shadow-2xl appearance-none">
+                    className="w-full p-5 bg-slate-900 border-none rounded-[1.5rem] text-white shadow-2xl appearance-none focus:ring-2 focus:ring-brand-green">
                     <option value="">¿Cómo podemos ayudarte?</option>
                     {servicesList.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
             </div>
 
             <div className="space-y-4">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center block tracking-[0.4em]">Febrero 2026</label>
-                <div className="bg-white p-7 rounded-[3rem] shadow-[0_30px_60px_rgba(0,0,0,0.15)] border border-gray-50">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] text-center block">Febrero 2026</label>
+                <div className="bg-white p-7 rounded-[3rem] shadow-[0_35px_70px_rgba(0,0,0,0.2)] border border-gray-100">
                     <div className="grid grid-cols-7 gap-4 place-items-center mb-6">
                         {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(l => <span key={l} className="text-[10px] font-black text-gray-300 uppercase">{l}</span>)}
                         {renderCalendar()}
@@ -141,24 +135,24 @@ const AppointmentsPage: React.FC = () => {
             </div>
 
             {date && (
-                <div className="space-y-4 animate-in slide-in-from-bottom-8">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center block">Horas Libres</label>
+                <div className="space-y-4 animate-in slide-in-from-bottom-10 duration-700">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] text-center block">Horarios Disponibles</label>
                     <div className="grid grid-cols-4 gap-2">
                         {timeSlots.map(t => {
                             const dateStr = `2026-02-${date.padStart(2, '0')}`;
-                            // COMPARACIÓN EXACTA: Buscamos si la combinación fecha+hora ya existe
-                            const isBusy = busySlots.some(s => s.fecha === dateStr && s.hora === t);
+                            // COMPARACIÓN SEGURA: Limpiamos espacios y comparamos strings
+                            const isBusy = busySlots.some(s => s.fecha.trim() === dateStr && s.hora.trim() === t);
                             
                             return (
                                 <button key={t} type="button" disabled={isBusy} onClick={() => setTime(t)}
-                                    className={`py-4 text-[10px] font-black rounded-2xl border transition-all ${
+                                    className={`py-4 text-[11px] font-black rounded-2xl border transition-all ${
                                         isBusy 
-                                        ? 'bg-slate-800/20 text-slate-600 border-transparent cursor-not-allowed' 
+                                        ? 'bg-slate-800/10 text-slate-700 border-transparent cursor-not-allowed opacity-40' 
                                         : time === t 
                                             ? 'bg-brand-green text-white border-brand-green shadow-lg scale-95' 
-                                            : 'bg-slate-800/40 text-white border-transparent hover:bg-slate-700'
+                                            : 'bg-slate-800/50 text-white border-transparent hover:bg-slate-700 shadow-md'
                                     }`}>
-                                    {isBusy ? 'Ocupado' : t}
+                                    {isBusy ? 'OCUPADO' : t}
                                 </button>
                             );
                         })}
@@ -167,8 +161,8 @@ const AppointmentsPage: React.FC = () => {
             )}
 
             <button type="submit" disabled={isSubmitting || !date || !time || !service}
-                className="w-full py-6 bg-brand-green text-white rounded-[2rem] font-black text-lg shadow-2xl disabled:bg-slate-800 transition-all uppercase tracking-[0.2em] active:scale-95">
-                {isSubmitting ? 'Confirmando...' : 'Confirmar Cita'}
+                className="w-full py-6 bg-brand-green text-white rounded-[2.5rem] font-black text-lg shadow-2xl shadow-brand-green/30 disabled:bg-slate-800 transition-all uppercase tracking-[0.3em] active:scale-95">
+                {isSubmitting ? 'CONFIRMANDO...' : 'CONFIRMAR CITA'}
             </button>
         </form>
     );
