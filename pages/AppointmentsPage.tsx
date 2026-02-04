@@ -27,7 +27,7 @@ const AppointmentsPage: React.FC = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // CARGA REAL DE HUECOS OCUPADOS
+    // FUNCIÓN PARA CARGAR LAS CITAS YA EXISTENTES
     const fetchBusySlots = async () => {
         const { data } = await supabase.from('citas').select('fecha, hora');
         if (data) setBusySlots(data);
@@ -37,7 +37,7 @@ const AppointmentsPage: React.FC = () => {
         fetchBusySlots();
     }, []);
 
-    // Lógica para saber si un día está totalmente lleno
+    // Comprobar si un día tiene todas las horas ocupadas
     const isDayFull = (day: number) => {
         const dateStr = `2026-02-${day.toString().padStart(2, '0')}`;
         const count = busySlots.filter(s => s.fecha === dateStr).length;
@@ -55,7 +55,7 @@ const AppointmentsPage: React.FC = () => {
 
             const { data: profile } = await supabase.from('profiles').select('full_name, phone').eq('id', user.id).single();
 
-            // GUARDADO CON TUS NOMBRES DE COLUMNA: nombre_paciente y telefono_paciente
+            // Guardamos con los nombres de columna correctos
             const { error: insertError } = await supabase.from('citas').insert([{ 
                 user_id: user.id,
                 nombre_paciente: profile?.full_name || 'Usuario App',
@@ -65,12 +65,9 @@ const AppointmentsPage: React.FC = () => {
                 hora: time
             }]);
 
-            if (insertError) {
-                if (insertError.code === '23505') throw new Error("Esta hora se acaba de ocupar. Por favor, elige otra.");
-                throw insertError;
-            }
-
-            await fetchBusySlots(); // Refrescamos al momento
+            if (insertError) throw insertError;
+            
+            await fetchBusySlots();
             setSubmitSuccess(true);
         } catch (err: any) {
             setError(err.message);
@@ -86,10 +83,10 @@ const AppointmentsPage: React.FC = () => {
         for (let d = 1; d <= 28; d++) {
             const currentDate = new Date(2026, 1, d);
             const isPast = currentDate < today;
-            const full = isDayFull(d); // COMPROBAMOS SI ESTÁ LLENO
+            const full = isDayFull(d);
             const isSelected = date === d.toString();
             
-            // Días en GRIS si son pasado o están LLENOS
+            // Lógica de colores del calendario
             const isDisabled = isPast || full;
             const circleClass = isDisabled 
                 ? "bg-gray-100 text-gray-300 cursor-not-allowed" 
@@ -111,9 +108,8 @@ const AppointmentsPage: React.FC = () => {
         return (
             <div className="p-10 text-center animate-in fade-in zoom-in duration-500">
                 <div className="text-6xl mb-6">✨</div>
-                <h2 className="text-2xl font-black mb-2 text-white">¡Cita Registrada!</h2>
-                <p className="text-slate-400 text-sm mb-8">Roberto la recibirá en su sistema.</p>
-                <button onClick={() => setSubmitSuccess(false)} className="w-full py-4 bg-brand-green text-white rounded-2xl font-bold mt-4">Pedir otra cita</button>
+                <h2 className="text-2xl font-black mb-2 text-white italic">¡Cita Guardada!</h2>
+                <button onClick={() => setSubmitSuccess(false)} className="w-full py-4 bg-brand-green text-white rounded-2xl font-bold mt-4 shadow-xl">Pedir otra</button>
             </div>
         );
     }
@@ -123,7 +119,7 @@ const AppointmentsPage: React.FC = () => {
             {error && <div className="p-4 bg-red-500/10 text-red-500 rounded-2xl text-[10px] font-black uppercase text-center border border-red-500/20">{error}</div>}
 
             <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2">Servicio</label>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2 italic">Servicio Farmacéutico</label>
                 <select required value={service} onChange={(e) => setService(e.target.value)}
                     className="w-full p-5 bg-slate-900 border-none rounded-[1.5rem] text-white shadow-2xl appearance-none">
                     <option value="">¿Cómo podemos ayudarte?</option>
@@ -143,7 +139,7 @@ const AppointmentsPage: React.FC = () => {
 
             {date && (
                 <div className="space-y-4 animate-in slide-in-from-bottom-8 duration-500">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center block">Horarios Disponibles</label>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center block italic">Franja Horaria</label>
                     <div className="grid grid-cols-4 gap-2">
                         {timeSlots.map(t => {
                             const dateStr = `2026-02-${date.padStart(2, '0')}`;
@@ -153,10 +149,10 @@ const AppointmentsPage: React.FC = () => {
                                 <button key={t} type="button" disabled={isBusy} onClick={() => setTime(t)}
                                     className={`py-4 text-[10px] font-black rounded-2xl border transition-all ${
                                         isBusy 
-                                        ? 'bg-slate-800/20 text-slate-600 border-transparent cursor-not-allowed' // OCUPADO: GRIS
+                                        ? 'bg-slate-800/20 text-slate-600 border-transparent cursor-not-allowed' 
                                         : time === t 
-                                            ? 'bg-brand-green text-white border-brand-green shadow-lg' 
-                                            : 'bg-slate-800/40 text-white border-transparent'
+                                            ? 'bg-brand-green text-white border-brand-green shadow-lg scale-95' 
+                                            : 'bg-slate-800/40 text-white border-transparent hover:bg-slate-700'
                                     }`}>
                                     {isBusy ? 'Cerrado' : t}
                                 </button>
@@ -167,7 +163,7 @@ const AppointmentsPage: React.FC = () => {
             )}
 
             <button type="submit" disabled={isSubmitting || !date || !time || !service}
-                className="w-full py-6 bg-brand-green text-white rounded-[2rem] font-black text-lg shadow-2xl disabled:bg-slate-800 transition-all uppercase tracking-[0.2em]">
+                className="w-full py-6 bg-brand-green text-white rounded-[2rem] font-black text-lg shadow-2xl shadow-brand-green/30 disabled:bg-slate-800 transition-all uppercase tracking-[0.2em] active:scale-95">
                 {isSubmitting ? 'Confirmando...' : 'Confirmar Cita'}
             </button>
         </form>
