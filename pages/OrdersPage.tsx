@@ -1,201 +1,12 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
-import { CameraIcon, PencilIcon, XMarkIcon, PlusIcon, PackageIcon } from '../components/Icons';
+import { CameraIcon, XMarkIcon, PackageIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 type ProductItem = {
     id: string;
     name: string;
     dosage: string;
-    isEditing?: boolean;
-};
-
-type Order = {
-    id: string;
-    date: string;
-    status: 'En preparación' | 'Listo para recoger' | 'Entregado';
-    items: string[];
-};
-
-const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve((reader.result as string).split(',')[1]);
-        reader.onerror = (error) => reject(error);
-    });
-};
-
-const ProductCard: React.FC<{ 
-    product: ProductItem; 
-    onDelete: (id: string) => void;
-    onUpdate: (id: string, name: string, dosage: string) => void;
-    onToggleEdit: (id: string) => void;
-}> = ({ product, onDelete, onUpdate, onToggleEdit }) => {
-    const [editName, setEditName] = useState(product.name);
-    const [editDosage, setEditDosage] = useState(product.dosage);
-
-    const handleSave = () => {
-        onUpdate(product.id, editName, editDosage);
-        onToggleEdit(product.id);
-    };
-
-    return (
-        <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 flex items-center justify-between animate-fade-in mb-2">
-            <div className="flex-grow pr-3">
-                {product.isEditing ? (
-                    <div className="flex flex-col space-y-2">
-                        <input 
-                            value={editName} 
-                            onChange={(e) => setEditName(e.target.value)}
-                            autoFocus
-                            className="text-sm font-medium bg-gray-50 dark:bg-slate-900 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-slate-700 outline-none w-full dark:text-white"
-                        />
-                        <input 
-                            value={editDosage} 
-                            onChange={(e) => setEditDosage(e.target.value)}
-                            className="text-[11px] bg-gray-50 dark:bg-slate-900 px-3 py-1 rounded-lg border border-gray-200 dark:border-slate-700 outline-none w-full dark:text-gray-400"
-                            placeholder="Dosis"
-                        />
-                        <button 
-                            onClick={handleSave} 
-                            className="text-[10px] font-bold text-white bg-brand-green px-3 py-1.5 rounded-lg uppercase self-start"
-                        >
-                            Guardar
-                        </button>
-                    </div>
-                ) : (
-                    <div className="flex items-baseline flex-wrap">
-                        <h4 className="font-semibold text-sm text-brand-dark dark:text-slate-100 mr-2">{product.name}</h4>
-                        {product.dosage && <span className="text-[11px] text-gray-400 dark:text-slate-500 font-medium">{product.dosage}</span>}
-                    </div>
-                )}
-            </div>
-            
-            {!product.isEditing && (
-                <div className="flex items-center space-x-1">
-                    <button onClick={() => onToggleEdit(product.id)} className="p-1.5 text-gray-300 hover:text-brand-green transition-colors">
-                        <PencilIcon className="h-4 w-4" />
-                    </button>
-                    <button onClick={() => onDelete(product.id)} className="p-1.5 text-gray-300 hover:text-red-400 transition-colors">
-                        <XMarkIcon className="h-4 w-4" />
-                    </button>
-                </div>
-            )}
-        </div>
-    );
-};
-
-const SmartOrderPanel: React.FC<{
-    products: ProductItem[];
-    setProducts: React.Dispatch<React.SetStateAction<ProductItem[]>>;
-    onScan: (file: File) => void;
-    isAnalyzing: boolean;
-    onSubmit: () => void;
-    isSubmitting: boolean;
-}> = ({ products, setProducts, onScan, isAnalyzing, onSubmit, isSubmitting }) => {
-    const [manualInput, setManualInput] = useState('');
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const deleteProduct = (id: string) => setProducts(products.filter(p => p.id !== id));
-    const toggleEdit = (id: string) => setProducts(products.map(p => p.id === id ? { ...p, isEditing: !p.isEditing } : p));
-    const updateProduct = (id: string, name: string, dosage: string) => 
-        setProducts(products.map(p => p.id === id ? { ...p, name, dosage } : p));
-
-    const handleAddManual = () => {
-        if (manualInput.trim()) {
-            setProducts([{ id: `man-${Date.now()}`, name: manualInput, dosage: '' }, ...products]);
-            setManualInput('');
-        }
-    };
-
-    return (
-        <div className="flex flex-col h-full animate-fade-in">
-            {/* Top Input Bar - Compact Style */}
-            <div className="p-4 bg-white dark:bg-slate-900 border-b border-gray-50 dark:border-slate-800">
-                <div className="flex items-center bg-gray-100 dark:bg-slate-800/50 rounded-xl px-2 py-0.5 transition-all border border-transparent focus-within:border-brand-green/20">
-                    <input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        className="hidden" 
-                        accept="image/*" 
-                        onChange={(e) => e.target.files?.[0] && onScan(e.target.files[0])}
-                    />
-                    <button 
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isAnalyzing}
-                        className="p-2 text-brand-green disabled:opacity-50"
-                    >
-                        {isAnalyzing ? (
-                            <div className="animate-spin h-5 w-5 border-2 border-brand-green border-t-transparent rounded-full"></div>
-                        ) : (
-                            <CameraIcon className="h-5 w-5" />
-                        )}
-                    </button>
-                    <input 
-                        placeholder="Añadir producto..." 
-                        value={manualInput}
-                        onChange={(e) => setManualInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleAddManual()}
-                        className="bg-transparent border-none focus:ring-0 text-xs font-medium w-full py-2 px-1 text-gray-500 dark:text-slate-300 placeholder:text-gray-400"
-                    />
-                    <button 
-                        onClick={handleAddManual}
-                        disabled={!manualInput.trim()}
-                        className="p-2 text-brand-green disabled:text-gray-300"
-                    >
-                        <PlusIcon className="h-5 w-5" />
-                    </button>
-                </div>
-            </div>
-
-            {/* List Area */}
-            <div className="flex-grow p-4 overflow-y-auto scrollbar-hide">
-                {products.length === 0 ? (
-                    <div className="py-20 text-center px-8">
-                        <p className="text-xs font-medium text-gray-400 dark:text-slate-600 leading-relaxed italic">
-                            Sube una imagen o escribe el nombre del producto que necesites
-                        </p>
-                    </div>
-                ) : (
-                    <div className="space-y-1">
-                        <div className="flex items-center justify-between mb-4 px-1">
-                            <h3 className="text-[10px] font-bold text-gray-300 dark:text-slate-700 uppercase tracking-widest">Tu selección</h3>
-                            <span className="text-[10px] font-bold text-brand-green">{products.length} {products.length === 1 ? 'ITEM' : 'ITEMS'}</span>
-                        </div>
-                        {products.map(product => (
-                            <ProductCard 
-                                key={product.id} 
-                                product={product} 
-                                onDelete={deleteProduct} 
-                                onUpdate={updateProduct}
-                                onToggleEdit={toggleEdit}
-                            />
-                        ))}
-                    </div>
-                )}
-            </div>
-
-            {/* Bottom Section - Integrated Confirmation */}
-            <div className="p-5 bg-white dark:bg-slate-900 border-t border-gray-50 dark:border-slate-800">
-                <button 
-                    onClick={onSubmit}
-                    disabled={isSubmitting || products.length === 0}
-                    className="w-full flex justify-center py-4 px-4 border border-transparent rounded-xl shadow-md text-sm font-bold text-white bg-brand-green hover:bg-opacity-95 focus:outline-none transition-all active:scale-[0.98] disabled:bg-gray-300 disabled:shadow-none"
-                >
-                    {isSubmitting ? 'Procesando pedido...' : 'Confirmar Pedido'}
-                </button>
-                <div className="mt-3 text-center">
-                    <p className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-[0.1em]">
-                        Se admite pago en tienda o por bizum
-                    </p>
-                </div>
-            </div>
-        </div>
-    );
 };
 
 const OrdersPage: React.FC = () => {
@@ -204,182 +15,169 @@ const OrdersPage: React.FC = () => {
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [success, setSuccess] = useState(false);
-    const [orders, setOrders] = useState<Order[]>([]);
-    const [loadingHistory, setLoadingHistory] = useState(false);
+    const [orders, setOrders] = useState<any[]>([]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => {
-        if (activeTab === 'history') loadHistory();
-    }, [activeTab]);
-
-    const loadHistory = async () => {
-        setLoadingHistory(true);
-        try {
-            const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
-            if (error) throw error;
-            if (data) {
-                setOrders(data.map(o => ({
-                    id: o.id,
-                    date: new Date(o.created_at).toLocaleDateString(),
-                    status: o.status as Order['status'],
-                    items: o.items || []
-                })));
-            }
-        } catch (e) { console.error(e); } finally { setLoadingHistory(false); }
-    };
-
+    // 1. ESCÁNER CON GEMINI 3 (Ajustado para el OCR de tus fotos)
     const handleScan = async (file: File) => {
         setIsAnalyzing(true);
         try {
-            const base64 = await fileToBase64(file);
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            // Leemos la llave del archivo .env
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+            const genAI = new GoogleGenerativeAI(apiKey);
             
-            const schema = {
-                type: Type.ARRAY,
-                items: {
-                    type: Type.OBJECT,
-                    properties: {
-                        name: { type: Type.STRING, description: "Normalized medication name." },
-                        dosage: { type: Type.STRING, description: "Standardized dosage format." }
-                    },
-                    required: ["name", "dosage"]
-                }
-            };
+            // Forzamos el uso de Gemini 3 como en AI Studio
+            const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
-                contents: {
-                    parts: [
-                        { inlineData: { mimeType: file.type, data: base64 } },
-                        { text: "Extrae los medicamentos de la imagen. Corrige nombres y dosis. Devuelve JSON." }
-                    ]
-                },
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: schema
-                }
+            const base64Data = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve((reader.result as string).split(',')[1]);
+                reader.readAsDataURL(file);
             });
 
-            if (response.text) {
-                const results = JSON.parse(response.text);
-                const items: ProductItem[] = results.map((r: any, i: number) => ({
-                    id: `ai-${Date.now()}-${i}`,
-                    name: r.name,
-                    dosage: r.dosage
-                }));
-                setProducts(prev => [...items, ...prev]);
-            }
+            const prompt = "Actúa como farmacéutico. Analiza la imagen y extrae los medicamentos. Devuelve SOLO un array JSON con este formato: [{\"nombre\": \"Nombre del producto\", \"dosis\": \"Concentración/Dosis\"}]";
+
+            const result = await model.generateContent([
+                prompt,
+                { inlineData: { data: base64Data, mimeType: file.type } }
+            ]);
+
+            const response = await result.response;
+            const text = response.text().replace(/```json|```/g, "");
+            const extracted = JSON.parse(text);
+
+            const newItems = extracted.map((item: any) => ({
+                id: Math.random().toString(36).substr(2, 9),
+                name: item.nombre,
+                dosage: item.dosis
+            }));
+
+            setProducts([...newItems, ...products]);
         } catch (err) {
-            console.error(err);
-            alert("Error al escanear. Intenta con una foto más clara.");
+            console.error("Error OCR:", err);
+            alert("No se pudo leer la imagen. Asegúrate de que la API Key esté cargada en Dokploy.");
         } finally {
             setIsAnalyzing(false);
         }
     };
 
+    // 2. GUARDAR EN LA TABLA 'PEDIDOS' (Columna lista_productos JSONB)
     const handleConfirm = async () => {
         setIsSubmitting(true);
-        const orderId = `RV-${Math.floor(1000 + Math.random() * 9000)}`;
-        const items = products.map(p => `${p.name} ${p.dosage}`);
-        
         try {
-            const { error } = await supabase.from('orders').insert([{
-                id: orderId,
-                items,
-                status: 'En preparación',
-                payment_method: 'Pagar en tienda/Bizum'
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error("Inicia sesión para realizar el encargo.");
+
+            // Formato exacto para tu columna 'lista_productos'
+            const listaParaDB = products.map(p => ({
+                nombre: p.name,
+                dosis: p.dosage
+            }));
+
+            const { error } = await supabase.from('pedidos').insert([{
+                user_id: user.id,
+                lista_productos: listaParaDB, // Se guarda como JSONB
+                estado: 'Pendiente'
             }]);
+
             if (error) throw error;
             setSuccess(true);
-        } catch (e) {
-            console.error(e);
-            setSuccess(true); 
+        } catch (err: any) {
+            alert(err.message || "Error al conectar con la base de datos.");
         } finally {
             setIsSubmitting(false);
         }
     };
 
+    const loadHistory = async () => {
+        const { data } = await supabase
+            .from('pedidos')
+            .select('*')
+            .order('creado_el', { ascending: false }); // Orden por tu columna de fecha
+        if (data) setOrders(data);
+    };
+
+    useEffect(() => {
+        if (activeTab === 'history') loadHistory();
+    }, [activeTab]);
+
     if (success) {
         return (
-            <div className="p-10 flex flex-col items-center justify-center min-h-[60vh] text-center animate-fade-in">
-                <div className="bg-brand-green/10 p-8 rounded-full mb-8">
+            <div className="p-10 text-center animate-in fade-in zoom-in">
+                <div className="bg-brand-green/10 p-8 rounded-full mb-8 inline-block shadow-2xl">
                     <PackageIcon className="h-12 w-12 text-brand-green" />
                 </div>
-                <h2 className="text-xl font-bold text-brand-dark dark:text-white uppercase leading-none mb-3">¡Pedido Recibido!</h2>
-                <p className="text-xs text-gray-500 dark:text-slate-400 mb-10 leading-relaxed">Estamos procesando tu solicitud. Recibirás una notificación cuando esté listo para recoger.</p>
-                <button
-                    onClick={() => { setSuccess(false); setProducts([]); setActiveTab('history'); }}
-                    className="w-full py-4 bg-brand-green text-white rounded-xl font-bold text-sm shadow-lg shadow-brand-green/20"
-                >
-                    Ver mis pedidos
-                </button>
+                <h2 className="text-xl font-black text-white uppercase italic mb-3 tracking-tighter">¡PEDIDO REALIZADO!</h2>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-10">Farmacia Roberto Valero</p>
+                <button onClick={() => { setSuccess(false); setProducts([]); setActiveTab('history'); }} className="w-full py-5 bg-brand-green text-white rounded-2xl font-black uppercase tracking-widest shadow-xl">Ver historial</button>
             </div>
         );
     }
 
     return (
-        <div className="bg-brand-light dark:bg-slate-950 flex flex-col h-full overflow-hidden transition-colors">
-            {/* Tabs */}
-            <div className="bg-white dark:bg-slate-900 border-b border-gray-100 dark:border-slate-800">
-                <div className="flex max-w-md mx-auto">
-                    <button
-                        onClick={() => setActiveTab('new')}
-                        className={`flex-1 py-4 text-[10px] font-bold uppercase tracking-[0.15em] transition-all border-b-2 ${activeTab === 'new' ? 'border-brand-green text-brand-green' : 'border-transparent text-gray-400'}`}
-                    >
-                        Encargar
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('history')}
-                        className={`flex-1 py-4 text-[10px] font-bold uppercase tracking-[0.15em] transition-all border-b-2 ${activeTab === 'history' ? 'border-brand-green text-brand-green' : 'border-transparent text-gray-400'}`}
-                    >
-                        Historial
-                    </button>
+        <div className="bg-slate-950 flex flex-col h-full overflow-hidden">
+            <div className="bg-slate-900 border-b border-slate-800 p-2">
+                <div className="flex max-w-md mx-auto gap-2">
+                    <button onClick={() => setActiveTab('new')} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'new' ? 'bg-brand-green text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Nuevo Pedido</button>
+                    <button onClick={() => setActiveTab('history')} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'history' ? 'bg-brand-green text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Historial</button>
                 </div>
             </div>
-            
-            <div className="flex-grow overflow-hidden relative">
+
+            <div className="flex-grow flex flex-col overflow-hidden">
                 {activeTab === 'new' ? (
-                    <SmartOrderPanel 
-                        products={products}
-                        setProducts={setProducts}
-                        onScan={handleScan}
-                        isAnalyzing={isAnalyzing}
-                        onSubmit={handleConfirm}
-                        isSubmitting={isSubmitting}
-                    />
-                ) : (
-                    <div className="p-4 space-y-4 h-full overflow-y-auto scrollbar-hide">
-                        {loadingHistory ? (
-                            <div className="flex justify-center py-20">
-                                <div className="animate-spin h-6 w-6 border-2 border-brand-green border-t-transparent rounded-full"></div>
+                    <>
+                        <div className="p-6 bg-slate-900 border-b border-slate-800 flex items-center gap-5">
+                            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} />
+                            <button onClick={() => fileInputRef.current?.click()} disabled={isAnalyzing} className="p-5 bg-brand-green text-white rounded-full shadow-[0_0_30px_rgba(0,223,154,0.3)] active:scale-90 transition-transform disabled:opacity-30">
+                                {isAnalyzing ? <div className="animate-spin h-6 w-6 border-2 border-white border-t-transparent rounded-full"></div> : <CameraIcon className="h-7 w-7" />}
+                            </button>
+                            <div className="flex-grow">
+                                <h3 className="text-white font-black text-xs uppercase italic tracking-tighter">OCR Inteligente</h3>
+                                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-[0.2em]">Usando Gemini 3 Flash</p>
                             </div>
-                        ) : orders.length === 0 ? (
-                            <div className="text-center py-20 opacity-40 italic">
-                                <p className="text-xs font-medium uppercase tracking-widest">No hay pedidos registrados</p>
-                            </div>
-                        ) : (
-                            orders.map(order => (
-                                <div key={order.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-50 dark:border-slate-700">
-                                    <div className="flex justify-between items-start mb-3">
-                                        <div>
-                                            <span className="text-[9px] font-bold text-gray-400 uppercase block mb-0.5">#{order.id}</span>
-                                            <span className="font-bold text-brand-dark dark:text-white text-sm">{order.date}</span>
-                                        </div>
-                                        <span className="text-[9px] font-bold px-2.5 py-1 rounded-full bg-brand-green/10 text-brand-green uppercase">{order.status}</span>
-                                    </div>
-                                    <div className="space-y-1">
-                                        {order.items.map((item, i) => (
-                                            <div key={i} className="flex items-center text-[11px] text-gray-500 dark:text-slate-400">
-                                                <div className="w-1 h-1 bg-brand-green rounded-full mr-2 opacity-50"></div>
-                                                {item}
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="pt-3 mt-3 border-t border-gray-50 dark:border-slate-700 text-right">
-                                        <Link to={`/tracking/${order.id}`} className="text-[9px] font-bold text-brand-green uppercase tracking-widest">Detalles →</Link>
-                                    </div>
+                        </div>
+
+                        <div className="flex-grow p-4 overflow-y-auto space-y-3 custom-scrollbar">
+                            {products.length === 0 && !isAnalyzing && (
+                                <div className="py-20 text-center px-10">
+                                    <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest leading-loose italic">Sube la foto de tu medicamento para que Roberto lo prepare</p>
                                 </div>
-                            ))
-                        )}
+                            )}
+                            {products.map(p => (
+                                <div key={p.id} className="bg-slate-900 p-5 rounded-2xl border border-slate-800 flex justify-between items-center animate-in slide-in-from-right duration-500 shadow-sm">
+                                    <div className="flex flex-col">
+                                        <span className="text-sm font-black text-white uppercase italic tracking-tight">{p.name}</span>
+                                        <span className="text-[10px] text-brand-green font-black uppercase">{p.dosage}</span>
+                                    </div>
+                                    <button onClick={() => setProducts(products.filter(i => i.id !== p.id))} className="p-2 text-slate-700 hover:text-red-500 transition-colors"><XMarkIcon className="h-6 w-6"/></button>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="p-5 bg-slate-900 border-t border-slate-800">
+                            <button onClick={handleConfirm} disabled={isSubmitting || products.length === 0} className="w-full py-6 bg-brand-green text-white rounded-[2rem] font-black uppercase tracking-[0.3em] shadow-[0_20px_40px_rgba(0,0,0,0.4)] disabled:opacity-10 active:scale-95 transition-all">
+                                {isSubmitting ? 'ENVIANDO...' : 'CONFIRMAR ENCARGO'}
+                            </button>
+                        </div>
+                    </>
+                ) : (
+                    <div className="p-4 space-y-4 overflow-y-auto pb-24">
+                        {orders.map(o => (
+                            <div key={o.id} className="bg-slate-900 p-5 rounded-[2rem] border border-slate-800 shadow-xl">
+                                <div className="flex justify-between items-center mb-4">
+                                    <span className={`text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest ${o.estado === 'Pendiente' ? 'bg-orange-500/10 text-orange-400' : 'bg-brand-green/10 text-brand-green'}`}>{o.estado}</span>
+                                    <span className="text-[10px] text-slate-600 font-bold uppercase">{new Date(o.creado_el).toLocaleDateString()}</span>
+                                </div>
+                                <div className="space-y-2">
+                                    {o.lista_productos?.map((item: any, i: number) => (
+                                        <div key={i} className="flex items-center text-[11px] text-slate-300 font-bold italic">
+                                            <div className="w-1.5 h-1.5 bg-brand-green rounded-full mr-3 shadow-[0_0_10px_rgba(0,223,154,1)]"></div>
+                                            {item.nombre} - {item.dosis}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
             </div>
