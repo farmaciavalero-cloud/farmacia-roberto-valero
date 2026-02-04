@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CameraIcon, XMarkIcon, PackageIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-// ESTA ES LA LÍNEA QUE HEMOS CAMBIADO PARA ARREGLAR EL ERROR:
+// CAMBIO CLAVE: Importación oficial para evitar error de Nixpacks
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 type ProductItem = {
@@ -19,12 +19,13 @@ const OrdersPage: React.FC = () => {
     const [orders, setOrders] = useState<any[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // ESCÁNER CON GEMINI 3
+    // ESCÁNER CON GEMINI 3 (Ajustado para el OCR de tus fotos)
     const handleScan = async (file: File) => {
         setIsAnalyzing(true);
         try {
+            // Leemos la llave del archivo .env
             const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-            if (!apiKey) throw new Error("API Key no configurada");
+            if (!apiKey) throw new Error("API Key no detectada");
 
             const genAI = new GoogleGenerativeAI(apiKey);
             const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
@@ -55,18 +56,18 @@ const OrdersPage: React.FC = () => {
             setProducts([...newItems, ...products]);
         } catch (err) {
             console.error(err);
-            alert("Error al leer la foto. Verifica la API Key en el panel de Dokploy.");
+            alert("Error al leer la foto. Revisa la API Key en el panel de Dokploy.");
         } finally {
             setIsAnalyzing(false);
         }
     };
 
-    // GUARDAR EN LA TABLA 'PEDIDOS'
+    // GUARDAR EN LA TABLA 'PEDIDOS' (Formato JSONB)
     const handleConfirm = async () => {
         setIsSubmitting(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error("Debes iniciar sesión");
+            if (!user) throw new Error("Inicia sesión primero");
 
             const listaParaDB = products.map(p => ({
                 nombre: p.name,
@@ -104,9 +105,9 @@ const OrdersPage: React.FC = () => {
                 <div className="bg-brand-green/10 p-8 rounded-full mb-8 inline-block shadow-2xl">
                     <PackageIcon className="h-12 w-12 text-brand-green" />
                 </div>
-                <h2 className="text-xl font-black text-white uppercase italic mb-3">¡ENCARGO ENVIADO!</h2>
+                <h2 className="text-xl font-black text-white uppercase italic mb-3 italic tracking-tighter">¡ENCARGO RECIBIDO!</h2>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-10">Farmacia Roberto Valero</p>
-                <button onClick={() => { setSuccess(false); setProducts([]); setActiveTab('history'); }} className="w-full py-5 bg-brand-green text-white rounded-2xl font-black uppercase tracking-widest">Ver historial</button>
+                <button onClick={() => { setSuccess(false); setProducts([]); setActiveTab('history'); }} className="w-full py-5 bg-brand-green text-white rounded-2xl font-black uppercase tracking-widest shadow-xl">Ver historial</button>
             </div>
         );
     }
@@ -129,22 +130,22 @@ const OrdersPage: React.FC = () => {
                                 {isAnalyzing ? <div className="animate-spin h-7 w-7 border-2 border-white border-t-transparent rounded-full"></div> : <CameraIcon className="h-7 w-7" />}
                             </button>
                             <div className="flex-grow">
-                                <h3 className="text-white font-black text-xs uppercase italic tracking-tighter">Escáner Roberto Valero</h3>
-                                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest italic">Gemini 3 Pro</p>
+                                <h3 className="text-white font-black text-xs uppercase italic tracking-tighter">Escáner Farmacia Valero</h3>
+                                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest italic">Gemini 3 Pro Online</p>
                             </div>
                         </div>
 
                         <div className="flex-grow p-4 overflow-y-auto space-y-3">
                             {products.length === 0 && !isAnalyzing && (
-                                <div className="py-20 text-center px-10 opacity-30 italic font-black text-[10px] uppercase tracking-widest leading-loose">Sube la foto de tu medicamento para que Roberto lo prepare</div>
+                                <div className="py-20 text-center px-10 opacity-30 italic font-black text-[10px] uppercase tracking-widest leading-loose">Sube la foto de tu medicamento para Roberto</div>
                             )}
                             {products.map(p => (
-                                <div key={p.id} className="bg-slate-900 p-5 rounded-2xl border border-slate-800 flex justify-between items-center">
+                                <div key={p.id} className="bg-slate-900 p-5 rounded-2xl border border-slate-800 flex justify-between items-center shadow-lg">
                                     <div className="flex flex-col">
                                         <span className="text-sm font-black text-white uppercase italic tracking-tight">{p.name}</span>
-                                        <span className="text-[10px] text-brand-green font-black uppercase">{p.dosage}</span>
+                                        <span className="text-[10px] text-brand-green font-black uppercase tracking-tighter">{p.dosage}</span>
                                     </div>
-                                    <button onClick={() => setProducts(products.filter(i => i.id !== p.id))} className="p-2 text-slate-700 hover:text-red-500"><XMarkIcon className="h-6 w-6"/></button>
+                                    <button onClick={() => setProducts(products.filter(i => i.id !== p.id))} className="p-2 text-slate-700 hover:text-red-500 transition-colors"><XMarkIcon className="h-6 w-6"/></button>
                                 </div>
                             ))}
                         </div>
