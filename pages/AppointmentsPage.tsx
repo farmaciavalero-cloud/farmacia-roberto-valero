@@ -27,7 +27,7 @@ const AppointmentsPage: React.FC = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // FUNCIÓN PARA REFRESCAR HUECOS OCUPADOS
+    // CARGA REAL DE HUECOS OCUPADOS
     const fetchBusySlots = async () => {
         const { data } = await supabase.from('citas').select('fecha, hora');
         if (data) setBusySlots(data);
@@ -36,6 +36,13 @@ const AppointmentsPage: React.FC = () => {
     useEffect(() => {
         fetchBusySlots();
     }, []);
+
+    // Lógica para saber si un día está totalmente lleno
+    const isDayFull = (day: number) => {
+        const dateStr = `2026-02-${day.toString().padStart(2, '0')}`;
+        const count = busySlots.filter(s => s.fecha === dateStr).length;
+        return count >= timeSlots.length;
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -48,6 +55,7 @@ const AppointmentsPage: React.FC = () => {
 
             const { data: profile } = await supabase.from('profiles').select('full_name, phone').eq('id', user.id).single();
 
+            // GUARDADO CON TUS NOMBRES DE COLUMNA: nombre_paciente y telefono_paciente
             const { error: insertError } = await supabase.from('citas').insert([{ 
                 user_id: user.id,
                 nombre_paciente: profile?.full_name || 'Usuario App',
@@ -57,15 +65,15 @@ const AppointmentsPage: React.FC = () => {
                 hora: time
             }]);
 
-            if (insertError) throw insertError;
-            
-            // Si tiene éxito, refrescamos los huecos ocupados inmediatamente
-            await fetchBusySlots();
+            if (insertError) {
+                if (insertError.code === '23505') throw new Error("Esta hora se acaba de ocupar. Por favor, elige otra.");
+                throw insertError;
+            }
+
+            await fetchBusySlots(); // Refrescamos al momento
             setSubmitSuccess(true);
         } catch (err: any) {
             setError(err.message);
-            // Si hay error de duplicado, refrescamos por si acaso
-            fetchBusySlots();
         } finally {
             setIsSubmitting(false);
         }
@@ -78,17 +86,19 @@ const AppointmentsPage: React.FC = () => {
         for (let d = 1; d <= 28; d++) {
             const currentDate = new Date(2026, 1, d);
             const isPast = currentDate < today;
+            const full = isDayFull(d); // COMPROBAMOS SI ESTÁ LLENO
             const isSelected = date === d.toString();
             
-            // Días pasados en gris
-            const circleClass = isPast 
+            // Días en GRIS si son pasado o están LLENOS
+            const isDisabled = isPast || full;
+            const circleClass = isDisabled 
                 ? "bg-gray-100 text-gray-300 cursor-not-allowed" 
                 : isSelected 
                     ? "bg-brand-green text-white scale-110 shadow-lg" 
                     : "bg-black text-white hover:bg-slate-800 cursor-pointer shadow-md";
 
             days.push(
-                <button key={d} type="button" disabled={isPast} onClick={() => setDate(d.toString())}
+                <button key={d} type="button" disabled={isDisabled} onClick={() => setDate(d.toString())}
                     className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-black transition-all ${circleClass}`}>
                     {d}
                 </button>
@@ -101,8 +111,8 @@ const AppointmentsPage: React.FC = () => {
         return (
             <div className="p-10 text-center animate-in fade-in zoom-in duration-500">
                 <div className="text-6xl mb-6">✨</div>
-                <h2 className="text-2xl font-black mb-2 text-white">¡Cita Confirmada!</h2>
-                <p className="text-slate-400 text-sm mb-8">Tu hueco ha sido reservado. Roberto te espera.</p>
+                <h2 className="text-2xl font-black mb-2 text-white">¡Cita Registrada!</h2>
+                <p className="text-slate-400 text-sm mb-8">Roberto la recibirá en su sistema.</p>
                 <button onClick={() => setSubmitSuccess(false)} className="w-full py-4 bg-brand-green text-white rounded-2xl font-bold mt-4">Pedir otra cita</button>
             </div>
         );
@@ -137,19 +147,18 @@ const AppointmentsPage: React.FC = () => {
                     <div className="grid grid-cols-4 gap-2">
                         {timeSlots.map(t => {
                             const dateStr = `2026-02-${date.padStart(2, '0')}`;
-                            // COMPROBACIÓN: ¿Está esta hora ya en Supabase para este día?
                             const isBusy = busySlots.some(s => s.fecha === dateStr && s.hora === t);
                             
                             return (
                                 <button key={t} type="button" disabled={isBusy} onClick={() => setTime(t)}
                                     className={`py-4 text-[10px] font-black rounded-2xl border transition-all ${
                                         isBusy 
-                                        ? 'bg-slate-800/20 text-slate-600 border-transparent cursor-not-allowed' 
+                                        ? 'bg-slate-800/20 text-slate-600 border-transparent cursor-not-allowed' // OCUPADO: GRIS
                                         : time === t 
-                                            ? 'bg-brand-green text-white border-brand-green shadow-lg scale-95' 
-                                            : 'bg-slate-800/40 text-white border-transparent hover:bg-slate-700'
+                                            ? 'bg-brand-green text-white border-brand-green shadow-lg' 
+                                            : 'bg-slate-800/40 text-white border-transparent'
                                     }`}>
-                                    {isBusy ? 'Ocupado' : t}
+                                    {isBusy ? 'Cerrado' : t}
                                 </button>
                             );
                         })}
