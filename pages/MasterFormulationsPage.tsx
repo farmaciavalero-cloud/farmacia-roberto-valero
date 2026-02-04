@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { GoogleGenAI, Schema, Type } from "@google/genai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { BeakerIcon, ChevronDownIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 
