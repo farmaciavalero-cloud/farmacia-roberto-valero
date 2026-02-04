@@ -67,25 +67,25 @@ const MasterFormulationsPage: React.FC = () => {
             const base64Data = await fileToBase64(file);
 
             // 2. Initialize Gemini
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenerativeAI(process.env.API_KEY || '');
 
             // 3. Define the Schema for structured output
             const responseSchema = {
-                type: Type.OBJECT,
+                type: SchemaType.OBJECT,
                 properties: {
-                    patientName: { type: Type.STRING, description: "Full name of the patient found in the prescription." },
-                    patientDni: { type: Type.STRING, description: "Patient's DNI, NIF, or ID number." },
-                    phoneNumber: { type: Type.STRING, description: "Patient contact phone number if present." },
-                    doctorName: { type: Type.STRING, description: "Name of the prescribing doctor." },
-                    doctorCollegiateNumber: { type: Type.STRING, description: "Doctor's collegiate license number (Número de colegiado)." },
+                    patientName: { type: SchemaType.STRING, description: "Full name of the patient found in the prescription." },
+                    patientDni: { type: SchemaType.STRING, description: "Patient's DNI, NIF, or ID number." },
+                    phoneNumber: { type: SchemaType.STRING, description: "Patient contact phone number if present." },
+                    doctorName: { type: SchemaType.STRING, description: "Name of the prescribing doctor." },
+                    doctorCollegiateNumber: { type: SchemaType.STRING, description: "Doctor's collegiate license number (Número de colegiado)." },
                     composition: {
-                        type: Type.ARRAY,
+                        type: SchemaType.ARRAY,
                         description: "List of ingredients and amounts for the master formulation.",
                         items: {
-                            type: Type.OBJECT,
+                            type: SchemaType.OBJECT,
                             properties: {
-                                ingredient: { type: Type.STRING },
-                                amount: { type: Type.STRING }
+                                ingredient: { type: SchemaType.STRING },
+                                amount: { type: SchemaType.STRING }
                             }
                         }
                     }
