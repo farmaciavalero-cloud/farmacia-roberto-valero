@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CameraIcon, XMarkIcon, PackageIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
+// CAMBIO CRÍTICO: Usamos la librería oficial para evitar el error de Build
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 type ProductItem = {
@@ -18,15 +19,16 @@ const OrdersPage: React.FC = () => {
     const [orders, setOrders] = useState<any[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // 1. ESCÁNER CON GEMINI 3 (Ajustado para el OCR de tus fotos)
+    // 1. ESCÁNER INTELIGENTE (Gemini 3 + OCR)
     const handleScan = async (file: File) => {
         setIsAnalyzing(true);
         try {
-            // Leemos la llave del archivo .env
+            // Leemos la llave con el formato correcto para Vite
             const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+            if (!apiKey) throw new Error("API Key no configurada");
+
             const genAI = new GoogleGenerativeAI(apiKey);
-            
-            // Forzamos el uso de Gemini 3 como en AI Studio
+            // Usamos tu modelo preferido: Gemini 3
             const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
             const base64Data = await new Promise<string>((resolve) => {
@@ -35,7 +37,7 @@ const OrdersPage: React.FC = () => {
                 reader.readAsDataURL(file);
             });
 
-            const prompt = "Actúa como farmacéutico. Analiza la imagen y extrae los medicamentos. Devuelve SOLO un array JSON con este formato: [{\"nombre\": \"Nombre del producto\", \"dosis\": \"Concentración/Dosis\"}]";
+            const prompt = "Actúa como farmacéutico profesional. Extrae los productos de esta imagen. Devuelve SOLO un array JSON con este formato: [{\"nombre\": \"Producto\", \"dosis\": \"Dosis\"}]";
 
             const result = await model.generateContent([
                 prompt,
@@ -54,46 +56,44 @@ const OrdersPage: React.FC = () => {
 
             setProducts([...newItems, ...products]);
         } catch (err) {
-            console.error("Error OCR:", err);
-            alert("No se pudo leer la imagen. Asegúrate de que la API Key esté cargada en Dokploy.");
+            console.error(err);
+            alert("Error al leer la foto. Asegúrate de que la API Key esté bien puesta en Dokploy.");
         } finally {
             setIsAnalyzing(false);
         }
     };
 
-    // 2. GUARDAR EN LA TABLA 'PEDIDOS' (Columna lista_productos JSONB)
+    // 2. GUARDAR EN LA TABLA 'PEDIDOS' (Formato JSONB)
     const handleConfirm = async () => {
         setIsSubmitting(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error("Inicia sesión para realizar el encargo.");
+            if (!user) throw new Error("Debes iniciar sesión");
 
-            // Formato exacto para tu columna 'lista_productos'
+            // Mapeamos al formato 'jsonb' de tu columna lista_productos
             const listaParaDB = products.map(p => ({
                 nombre: p.name,
                 dosis: p.dosage
             }));
 
-            const { error } = await supabase.from('pedidos').insert([{
+            const { error: dbError } = await supabase.from('pedidos').insert([{
                 user_id: user.id,
-                lista_productos: listaParaDB, // Se guarda como JSONB
+                lista_productos: listaParaDB,
                 estado: 'Pendiente'
             }]);
 
-            if (error) throw error;
+            if (dbError) throw dbError;
             setSuccess(true);
-        } catch (err: any) {
-            alert(err.message || "Error al conectar con la base de datos.");
+        } catch (err) {
+            console.error(err);
+            alert("Error al guardar en la base de datos.");
         } finally {
             setIsSubmitting(false);
         }
     };
 
     const loadHistory = async () => {
-        const { data } = await supabase
-            .from('pedidos')
-            .select('*')
-            .order('creado_el', { ascending: false }); // Orden por tu columna de fecha
+        const { data } = await supabase.from('pedidos').select('*').order('creado_el', { ascending: false });
         if (data) setOrders(data);
     };
 
@@ -103,11 +103,11 @@ const OrdersPage: React.FC = () => {
 
     if (success) {
         return (
-            <div className="p-10 text-center animate-in fade-in zoom-in">
-                <div className="bg-brand-green/10 p-8 rounded-full mb-8 inline-block shadow-2xl">
+            <div className="p-10 text-center animate-in zoom-in">
+                <div className="bg-brand-green/10 p-8 rounded-full mb-8 inline-block shadow-2xl shadow-brand-green/20">
                     <PackageIcon className="h-12 w-12 text-brand-green" />
                 </div>
-                <h2 className="text-xl font-black text-white uppercase italic mb-3 tracking-tighter">¡PEDIDO REALIZADO!</h2>
+                <h2 className="text-xl font-black text-white uppercase italic mb-3 tracking-tighter italic">¡ENCARGO ENVIADO!</h2>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-10">Farmacia Roberto Valero</p>
                 <button onClick={() => { setSuccess(false); setProducts([]); setActiveTab('history'); }} className="w-full py-5 bg-brand-green text-white rounded-2xl font-black uppercase tracking-widest shadow-xl">Ver historial</button>
             </div>
@@ -118,8 +118,8 @@ const OrdersPage: React.FC = () => {
         <div className="bg-slate-950 flex flex-col h-full overflow-hidden">
             <div className="bg-slate-900 border-b border-slate-800 p-2">
                 <div className="flex max-w-md mx-auto gap-2">
-                    <button onClick={() => setActiveTab('new')} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'new' ? 'bg-brand-green text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Nuevo Pedido</button>
-                    <button onClick={() => setActiveTab('history')} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'history' ? 'bg-brand-green text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Historial</button>
+                    <button onClick={() => setActiveTab('new')} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'new' ? 'bg-brand-green text-white shadow-lg' : 'text-slate-500'}`}>Nuevo Pedido</button>
+                    <button onClick={() => setActiveTab('history')} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'history' ? 'bg-brand-green text-white shadow-lg' : 'text-slate-500'}`}>Historial</button>
                 </div>
             </div>
 
@@ -128,35 +128,33 @@ const OrdersPage: React.FC = () => {
                     <>
                         <div className="p-6 bg-slate-900 border-b border-slate-800 flex items-center gap-5">
                             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} />
-                            <button onClick={() => fileInputRef.current?.click()} disabled={isAnalyzing} className="p-5 bg-brand-green text-white rounded-full shadow-[0_0_30px_rgba(0,223,154,0.3)] active:scale-90 transition-transform disabled:opacity-30">
-                                {isAnalyzing ? <div className="animate-spin h-6 w-6 border-2 border-white border-t-transparent rounded-full"></div> : <CameraIcon className="h-7 w-7" />}
+                            <button onClick={() => fileInputRef.current?.click()} disabled={isAnalyzing} className="p-5 bg-brand-green text-white rounded-full shadow-[0_0_30px_rgba(0,223,154,0.3)] active:scale-95 transition-all disabled:opacity-20">
+                                {isAnalyzing ? <div className="animate-spin h-7 w-7 border-2 border-white border-t-transparent rounded-full"></div> : <CameraIcon className="h-7 w-7" />}
                             </button>
                             <div className="flex-grow">
                                 <h3 className="text-white font-black text-xs uppercase italic tracking-tighter">OCR Inteligente</h3>
-                                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-[0.2em]">Usando Gemini 3 Flash</p>
+                                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">GEMINI 3 ACTIVADO</p>
                             </div>
                         </div>
 
-                        <div className="flex-grow p-4 overflow-y-auto space-y-3 custom-scrollbar">
+                        <div className="flex-grow p-4 overflow-y-auto space-y-3">
                             {products.length === 0 && !isAnalyzing && (
-                                <div className="py-20 text-center px-10">
-                                    <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest leading-loose italic">Sube la foto de tu medicamento para que Roberto lo prepare</p>
-                                </div>
+                                <div className="py-20 text-center px-10 opacity-30 italic font-black text-[10px] uppercase tracking-widest leading-loose">Sube la foto de tu medicamento para que Roberto lo prepare</div>
                             )}
                             {products.map(p => (
-                                <div key={p.id} className="bg-slate-900 p-5 rounded-2xl border border-slate-800 flex justify-between items-center animate-in slide-in-from-right duration-500 shadow-sm">
+                                <div key={p.id} className="bg-slate-900 p-5 rounded-2xl border border-slate-800 flex justify-between items-center shadow-lg">
                                     <div className="flex flex-col">
                                         <span className="text-sm font-black text-white uppercase italic tracking-tight">{p.name}</span>
-                                        <span className="text-[10px] text-brand-green font-black uppercase">{p.dosage}</span>
+                                        <span className="text-[10px] text-brand-green font-black uppercase tracking-tighter">{p.dosage}</span>
                                     </div>
-                                    <button onClick={() => setProducts(products.filter(i => i.id !== p.id))} className="p-2 text-slate-700 hover:text-red-500 transition-colors"><XMarkIcon className="h-6 w-6"/></button>
+                                    <button onClick={() => setProducts(products.filter(i => i.id !== p.id))} className="p-2 text-slate-700 hover:text-red-500"><XMarkIcon className="h-6 w-6"/></button>
                                 </div>
                             ))}
                         </div>
 
                         <div className="p-5 bg-slate-900 border-t border-slate-800">
-                            <button onClick={handleConfirm} disabled={isSubmitting || products.length === 0} className="w-full py-6 bg-brand-green text-white rounded-[2rem] font-black uppercase tracking-[0.3em] shadow-[0_20px_40px_rgba(0,0,0,0.4)] disabled:opacity-10 active:scale-95 transition-all">
-                                {isSubmitting ? 'ENVIANDO...' : 'CONFIRMAR ENCARGO'}
+                            <button onClick={handleConfirm} disabled={isSubmitting || products.length === 0} className="w-full py-6 bg-brand-green text-white rounded-[2rem] font-black uppercase tracking-[0.3em] shadow-2xl disabled:opacity-10 active:scale-95 transition-all">
+                                {isSubmitting ? 'PROCESANDO...' : 'CONFIRMAR ENCARGO'}
                             </button>
                         </div>
                     </>
