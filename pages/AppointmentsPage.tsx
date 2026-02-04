@@ -27,27 +27,19 @@ const AppointmentsPage: React.FC = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // FUNCIÓN DE CARGA: Limpia las fechas al recibirlas
     const fetchOccupied = async () => {
         const { data } = await supabase.from('citas').select('fecha, hora');
-        if (data) {
-            const normalizedData = data.map(item => ({
-                ...item,
-                fecha: item.fecha.split('T')[0] // Nos quedamos solo con YYYY-MM-DD
-            }));
-            setBusySlots(normalizedData);
-        }
+        if (data) setBusySlots(data);
     };
 
     useEffect(() => {
         fetchOccupied();
-    }, [submitSuccess]);
+    }, [date, submitSuccess]);
 
-    // Lógica para bloquear días completos
     const isDayFull = (day: number) => {
         const dateStr = `2026-02-${day.toString().padStart(2, '0')}`;
-        const count = busySlots.filter(s => s.fecha === dateStr).length;
-        return count >= timeSlots.length;
+        const occupiedInDay = busySlots.filter(s => s.fecha === dateStr).length;
+        return occupiedInDay >= timeSlots.length;
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -57,7 +49,7 @@ const AppointmentsPage: React.FC = () => {
 
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error("Inicia sesión para continuar.");
+            if (!user) throw new Error("INICIA SESIÓN PARA CONTINUAR.");
 
             const { data: profile } = await supabase.from('profiles').select('full_name, phone').eq('id', user.id).single();
 
@@ -65,22 +57,22 @@ const AppointmentsPage: React.FC = () => {
 
             const { error: insertError } = await supabase.from('citas').insert([{ 
                 user_id: user.id,
-                nombre_paciente: profile?.full_name || 'Usuario',
+                nombre_paciente: profile?.full_name || 'Usuario App',
                 telefono_paciente: profile?.phone || '',
                 servicio: service,
                 fecha: dateStr,
-                hora: time
+                hora: time // Aquí se guarda como "16:00" y Supabase le pone los ":00" segundos
             }]);
 
             if (insertError) {
-                if (insertError.code === '23505') throw new Error("ESTE HUECO SE HA OCUPADO. POR FAVOR, ELIGE OTRO.");
+                if (insertError.code === '23505') throw new Error("¡VAYA! ESTA HORA YA SE HA OCUPADO. ELIGE OTRA.");
                 throw insertError;
             }
 
             setSubmitSuccess(true);
         } catch (err: any) {
             setError(err.message.toUpperCase());
-            fetchOccupied();
+            fetchOccupied(); 
         } finally {
             setIsSubmitting(false);
         }
@@ -96,7 +88,7 @@ const AppointmentsPage: React.FC = () => {
             const full = isDayFull(d);
             const isSelected = date === d.toString();
             
-            // Días bloqueados (Gris) y disponibles (Negro)
+            // Regla: Gris si está lleno o es pasado, Negro si hay disponibilidad
             const isDisabled = isPast || full;
             const circleClass = isDisabled 
                 ? "bg-gray-100 text-gray-300 cursor-not-allowed" 
@@ -116,10 +108,10 @@ const AppointmentsPage: React.FC = () => {
 
     if (submitSuccess) {
         return (
-            <div className="p-10 text-center animate-in fade-in zoom-in">
-                <div className="text-6xl mb-6">✨</div>
+            <div className="p-10 text-center animate-in fade-in zoom-in duration-500">
+                <div className="text-6xl mb-6 text-brand-green">✓</div>
                 <h2 className="text-2xl font-black mb-2 text-white italic">CITA REGISTRADA</h2>
-                <button onClick={() => window.location.reload()} className="w-full py-4 bg-brand-green text-white rounded-2xl font-bold mt-4 shadow-xl">VOLVER</button>
+                <button onClick={() => window.location.reload()} className="w-full py-4 bg-brand-green text-white rounded-2xl font-bold mt-4 shadow-xl">CERRAR</button>
             </div>
         );
     }
@@ -132,14 +124,14 @@ const AppointmentsPage: React.FC = () => {
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2 italic">Servicio</label>
                 <select required value={service} onChange={(e) => setService(e.target.value)}
                     className="w-full p-5 bg-slate-900 border-none rounded-[1.5rem] text-white shadow-2xl appearance-none">
-                    <option value="">¿Cómo podemos ayudarte?</option>
+                    <option value="">Selecciona servicio...</option>
                     {servicesList.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
             </div>
 
             <div className="space-y-4">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center block tracking-[0.4em]">Febrero 2026</label>
-                <div className="bg-white p-7 rounded-[3rem] shadow-[0_30px_60px_rgba(0,0,0,0.15)]">
+                <div className="bg-white p-7 rounded-[3rem] shadow-[0_30px_60px_rgba(0,0,0,0.15)] border border-gray-50">
                     <div className="grid grid-cols-7 gap-4 place-items-center mb-6">
                         {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(l => <span key={l} className="text-[10px] font-black text-gray-300 uppercase">{l}</span>)}
                         {renderCalendar()}
@@ -149,21 +141,22 @@ const AppointmentsPage: React.FC = () => {
 
             {date && (
                 <div className="space-y-4 animate-in slide-in-from-bottom-8">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center block">Horarios</label>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center block italic">Horarios Disponibles</label>
                     <div className="grid grid-cols-4 gap-2">
                         {timeSlots.map(t => {
                             const dateStr = `2026-02-${date.padStart(2, '0')}`;
-                            // COMPARACIÓN SEGURA: Buscamos coincidencia exacta de fecha y hora
-                            const isBusy = busySlots.some(s => s.fecha === dateStr && s.hora === t);
+                            
+                            // LA CLAVE: Usamos .startsWith() para que "16:00:00" coincida con "16:00"
+                            const isBusy = busySlots.some(s => s.fecha === dateStr && s.hora.startsWith(t));
                             
                             return (
                                 <button key={t} type="button" disabled={isBusy} onClick={() => setTime(t)}
                                     className={`py-4 text-[10px] font-black rounded-2xl border transition-all ${
                                         isBusy 
-                                        ? 'bg-gray-200 text-gray-400 border-transparent cursor-not-allowed' // GRIS Y BLOQUEADO
+                                        ? 'bg-gray-200 text-gray-400 border-transparent cursor-not-allowed opacity-40' 
                                         : time === t 
                                             ? 'bg-brand-green text-white border-brand-green shadow-lg scale-95' 
-                                            : 'bg-slate-800/50 text-white border-transparent hover:bg-slate-700'
+                                            : 'bg-slate-800/40 text-white border-transparent hover:bg-slate-700'
                                     }`}>
                                     {isBusy ? 'OCUPADO' : t}
                                 </button>
