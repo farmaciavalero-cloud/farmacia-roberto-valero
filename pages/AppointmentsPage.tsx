@@ -27,18 +27,17 @@ const AppointmentsPage: React.FC = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // FUNCIÓN PARA CARGAR TODAS LAS CITAS DEL MES
+    // FUNCIÓN PARA CARGAR TODAS LAS CITAS
     const fetchOccupied = async () => {
         const { data } = await supabase.from('citas').select('fecha, hora');
         if (data) {
-            console.log("Datos de Supabase:", data);
             setBusySlots(data);
         }
     };
 
     useEffect(() => {
         fetchOccupied();
-    }, [date]); // Se refresca cada vez que eliges un día
+    }, [date, submitSuccess]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -47,7 +46,7 @@ const AppointmentsPage: React.FC = () => {
 
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error("Inicia sesión para continuar.");
+            if (!user) throw new Error("INICIA SESIÓN PARA CONTINUAR.");
 
             const { data: profile } = await supabase.from('profiles').select('full_name, phone').eq('id', user.id).single();
 
@@ -63,14 +62,14 @@ const AppointmentsPage: React.FC = () => {
             }]);
 
             if (insertError) {
-                if (insertError.code === '23505') throw new Error("¡VAYA! ALGUIEN SE TE HA ADELANTADO. ELIGE OTRA HORA.");
+                if (insertError.code === '23505') throw new Error("¡VAYA! ESTA HORA YA SE HA OCUPADO. ELIGE OTRA.");
                 throw insertError;
             }
 
             setSubmitSuccess(true);
         } catch (err: any) {
             setError(err.message.toUpperCase());
-            fetchOccupied(); // Forzamos refresco si falla
+            fetchOccupied(); 
         } finally {
             setIsSubmitting(false);
         }
@@ -89,7 +88,7 @@ const AppointmentsPage: React.FC = () => {
                 ? "bg-gray-100 text-gray-300 cursor-not-allowed" // Días pasados en gris
                 : isSelected 
                     ? "bg-brand-green text-white scale-110 shadow-lg" 
-                    : "bg-black text-white hover:bg-slate-800 cursor-pointer shadow-md"; // Disponibles en negro
+                    : "bg-black text-white hover:bg-slate-800 cursor-pointer shadow-md"; // Libres en negro
 
             days.push(
                 <button key={d} type="button" disabled={isPast} onClick={() => setDate(d.toString())}
@@ -105,7 +104,7 @@ const AppointmentsPage: React.FC = () => {
         return (
             <div className="p-10 text-center animate-in fade-in zoom-in duration-500">
                 <div className="text-6xl mb-6 text-brand-green">✓</div>
-                <h2 className="text-2xl font-black mb-2 text-white italic tracking-tighter">¡CITA REGISTRADA!</h2>
+                <h2 className="text-2xl font-black mb-2 text-white italic">CITA REGISTRADA</h2>
                 <button onClick={() => window.location.reload()} className="w-full py-4 bg-brand-green text-white rounded-2xl font-bold mt-4 shadow-xl">CERRAR</button>
             </div>
         );
@@ -113,7 +112,7 @@ const AppointmentsPage: React.FC = () => {
 
     return (
         <form onSubmit={handleSubmit} className="p-4 space-y-8 pb-24">
-            {error && <div className="p-4 bg-red-900/40 text-red-200 rounded-2xl text-[11px] font-black text-center border border-red-500/30 animate-pulse">{error}</div>}
+            {error && <div className="p-4 bg-red-900/40 text-red-200 rounded-2xl text-[11px] font-black text-center border border-red-500/30">{error}</div>}
 
             <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] ml-2">Servicio</label>
@@ -126,7 +125,7 @@ const AppointmentsPage: React.FC = () => {
 
             <div className="space-y-4">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] text-center block">Febrero 2026</label>
-                <div className="bg-white p-7 rounded-[3rem] shadow-[0_35px_70px_rgba(0,0,0,0.2)] border border-gray-100">
+                <div className="bg-white p-7 rounded-[3rem] shadow-[0_35px_70px_rgba(0,0,0,0.2)]">
                     <div className="grid grid-cols-7 gap-4 place-items-center mb-6">
                         {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(l => <span key={l} className="text-[10px] font-black text-gray-300 uppercase">{l}</span>)}
                         {renderCalendar()}
@@ -135,19 +134,19 @@ const AppointmentsPage: React.FC = () => {
             </div>
 
             {date && (
-                <div className="space-y-4 animate-in slide-in-from-bottom-10 duration-700">
+                <div className="space-y-4 animate-in slide-in-from-bottom-10">
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] text-center block">Horarios Disponibles</label>
                     <div className="grid grid-cols-4 gap-2">
                         {timeSlots.map(t => {
                             const dateStr = `2026-02-${date.padStart(2, '0')}`;
-                            // COMPARACIÓN SEGURA: Limpiamos espacios y comparamos strings
-                            const isBusy = busySlots.some(s => s.fecha.trim() === dateStr && s.hora.trim() === t);
+                            // COMPARACIÓN TOTALMENTE REHECHA: Comparamos el texto de la fecha quitando guiones
+                            const isBusy = busySlots.some(s => s.fecha.replace(/-/g, '') === dateStr.replace(/-/g, '') && s.hora === t);
                             
                             return (
                                 <button key={t} type="button" disabled={isBusy} onClick={() => setTime(t)}
                                     className={`py-4 text-[11px] font-black rounded-2xl border transition-all ${
                                         isBusy 
-                                        ? 'bg-slate-800/10 text-slate-700 border-transparent cursor-not-allowed opacity-40' 
+                                        ? 'bg-slate-800/10 text-slate-700 border-transparent cursor-not-allowed opacity-30' 
                                         : time === t 
                                             ? 'bg-brand-green text-white border-brand-green shadow-lg scale-95' 
                                             : 'bg-slate-800/50 text-white border-transparent hover:bg-slate-700 shadow-md'
@@ -161,7 +160,7 @@ const AppointmentsPage: React.FC = () => {
             )}
 
             <button type="submit" disabled={isSubmitting || !date || !time || !service}
-                className="w-full py-6 bg-brand-green text-white rounded-[2.5rem] font-black text-lg shadow-2xl shadow-brand-green/30 disabled:bg-slate-800 transition-all uppercase tracking-[0.3em] active:scale-95">
+                className="w-full py-6 bg-brand-green text-white rounded-[2.5rem] font-black text-lg shadow-2xl disabled:bg-slate-800 transition-all uppercase tracking-[0.3em] active:scale-95">
                 {isSubmitting ? 'CONFIRMANDO...' : 'CONFIRMAR CITA'}
             </button>
         </form>
