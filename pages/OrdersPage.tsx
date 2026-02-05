@@ -18,11 +18,13 @@ const OrdersPage: React.FC = () => {
     const [success, setSuccess] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // 1. ESCÁNER: Usa Gemini 1.5 Flash para extraer los datos
+    // ESCÁNER: Con alerta de error específico
     const handleScan = async (file: File) => {
         setIsAnalyzing(true);
         try {
             const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY;
+            if (!apiKey) throw new Error("API Key (VITE_GEMINI_API_KEY) no encontrada en el panel");
+
             const genAI = new GoogleGenerativeAI(apiKey);
             const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
@@ -32,10 +34,8 @@ const OrdersPage: React.FC = () => {
                 reader.readAsDataURL(file);
             });
 
-            const prompt = "Extrae los medicamentos. Devuelve SOLO JSON: [{\"nombre\": \"Producto\", \"dosis\": \"Dosis\"}]";
-
             const result = await model.generateContent([
-                prompt,
+                "Extrae los medicamentos. Devuelve SOLO JSON: [{\"nombre\": \"Producto\", \"dosis\": \"Dosis\"}]",
                 { inlineData: { data: base64Data, mimeType: file.type } }
             ]);
 
@@ -49,34 +49,35 @@ const OrdersPage: React.FC = () => {
             }));
 
             setProducts([...newItems, ...products]);
-        } catch (err) {
-            console.error("Error OCR:", err);
-            alert("No se pudo leer la imagen. Inténtalo de nuevo.");
+        } catch (err: any) {
+            console.error(err);
+            // ALERTA CON ERROR REAL
+            alert("Error OCR: " + (err.message || "Fallo desconocido al escanear"));
         } finally {
             setIsAnalyzing(false);
         }
     };
 
-    // 2. GUARDADO: Inserción directa en tu tabla 'pedidos'
+    // GUARDADO: Con alerta de error de Supabase
     const handleConfirm = async () => {
         if (products.length === 0) return;
         setIsSubmitting(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return alert("Inicia sesión para pedir.");
+            if (!user) throw new Error("No hay una sesión activa. Por favor, inicia sesión.");
 
-            // Enviamos el array al campo jsonb 'lista_productos' según tu SQL
-            const { error } = await supabase.from('pedidos').insert([{
+            const { error: dbError } = await supabase.from('pedidos').insert([{
                 user_id: user.id,
-                lista_productos: products,
+                lista_productos: products, // Se guarda en tu campo JSONB
                 estado: 'Pendiente'
             }]);
 
-            if (error) throw error;
+            if (dbError) throw dbError;
             setSuccess(true);
-        } catch (err) {
-            console.error("Error BD:", err);
-            alert("Error al guardar el pedido.");
+        } catch (err: any) {
+            console.error(err);
+            // ALERTA CON ERROR REAL DE BASE DE DATOS
+            alert("Error BD: " + (err.message || "No se pudo guardar el pedido"));
         } finally {
             setIsSubmitting(false);
         }
@@ -94,7 +95,7 @@ const OrdersPage: React.FC = () => {
                 <div className="bg-brand-green/10 p-8 rounded-full mb-8 inline-block shadow-2xl">
                     <PackageIcon className="h-12 w-12 text-brand-green" />
                 </div>
-                <h2 className="text-xl font-bold uppercase italic mb-6">¡Pedido Recibido!</h2>
+                <h2 className="text-xl font-bold uppercase italic mb-6">¡PEDIDO RECIBIDO!</h2>
                 <button onClick={() => { setSuccess(false); setProducts([]); setActiveTab('history'); }} className="w-full py-4 bg-brand-green text-white rounded-xl font-bold uppercase tracking-widest transition-transform active:scale-95">VER MIS PEDIDOS</button>
             </div>
         );
@@ -115,9 +116,8 @@ const OrdersPage: React.FC = () => {
             <div className="p-4 flex-grow overflow-y-auto">
                 {activeTab === 'new' ? (
                     <div className="space-y-6">
-                        {/* Buscador con iconos de cámara y añadir */}
                         <div className="bg-[#1e293b] rounded-xl p-1 flex items-center border border-gray-800 shadow-lg">
-                            <button onClick={() => fileInputRef.current?.click()} className="p-3 text-gray-500 hover:text-brand-green">
+                            <button onClick={() => fileInputRef.current?.click()} className="p-3 text-gray-400 hover:text-brand-green">
                                 {isAnalyzing ? <div className="h-5 w-5 animate-spin border-2 border-brand-green border-t-transparent rounded-full"/> : <CameraIcon className="h-5 w-5" />}
                             </button>
                             <input 
@@ -132,7 +132,6 @@ const OrdersPage: React.FC = () => {
                             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} />
                         </div>
 
-                        {/* Listado con Editar y Borrar */}
                         <div>
                             <div className="flex justify-between items-center mb-4 px-1">
                                 <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest italic">TU SELECCIÓN</h3>
@@ -156,7 +155,6 @@ const OrdersPage: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Botón de Confirmación */}
                         <div className="pt-4 space-y-4 text-center">
                             <button 
                                 onClick={handleConfirm} 
