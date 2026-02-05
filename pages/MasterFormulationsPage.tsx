@@ -24,7 +24,7 @@ const MasterFormulationsPage: React.FC = () => {
         notas_adicionales: ''
     });
     
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    const fileRef = useRef<HTMLElement>(null);
 
     // OCR usando el alias gemini-flash-latest
     const handleScan = async (file: File) => {
@@ -118,7 +118,7 @@ const MasterFormulationsPage: React.FC = () => {
 
                 {/* Zona de carga idéntica */}
                 <div 
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => fileRef.current?.click()}
                     className="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center cursor-pointer shadow-sm active:scale-95 transition-all"
                 >
                     {isAnalyzing ? (
@@ -133,7 +133,13 @@ const MasterFormulationsPage: React.FC = () => {
                             <p className="text-[10px] text-gray-400 uppercase font-bold tracking-tighter">PNG, JPG, PDF hasta 10MB</p>
                         </>
                     )}
-                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} />
+                    <input 
+  type="file" 
+  ref={fileInputRef} 
+  className="hidden" 
+  accept="image/*,application/pdf" // Añadimos soporte para PDF
+  onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} 
+/>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
