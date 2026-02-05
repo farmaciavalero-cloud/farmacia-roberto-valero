@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-// 1. Cambio de librería y tipos corregidos
+// CORRECCIÓN: Usamos la librería oficial y SchemaType
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { BeakerIcon, ChevronDownIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
@@ -62,10 +62,9 @@ const MasterFormulationsPage: React.FC = () => {
             
             const base64Data = await fileToBase64(file);
 
-            // 2. Inicialización corregida para @google/generative-ai
+            // CORRECCIÓN: Inicialización con GoogleGenerativeAI
             const genAI = new GoogleGenerativeAI(process.env.API_KEY || '');
 
-            // 3. Uso de SchemaType en lugar de Type
             const responseSchema = {
                 type: SchemaType.OBJECT,
                 properties: {
@@ -76,7 +75,7 @@ const MasterFormulationsPage: React.FC = () => {
                     doctorCollegiateNumber: { type: SchemaType.STRING, description: "Doctor's collegiate license number." },
                     composition: {
                         type: SchemaType.ARRAY,
-                        description: "List of ingredients and amounts for the master formulation.",
+                        description: "List of ingredients and amounts.",
                         items: {
                             type: SchemaType.OBJECT,
                             properties: {
@@ -88,7 +87,7 @@ const MasterFormulationsPage: React.FC = () => {
                 }
             };
 
-            // 4. Nueva forma de llamar al modelo
+            // CORRECCIÓN: Configuración del modelo
             const model = genAI.getGenerativeModel({ 
                 model: 'gemini-1.5-flash',
                 generationConfig: {
@@ -142,11 +141,14 @@ const MasterFormulationsPage: React.FC = () => {
                     doctor_name: doctorName,
                     composition: composition
                 }]);
+
             if (error) throw error;
+            
             setIsSaved(true);
             setTimeout(() => setIsSaved(false), 3000);
         } catch (error) {
             console.error("Error saving to Supabase", error);
+            // Aquí es donde saldría tu alerta si fallara la conexión
         }
     };
     
@@ -156,8 +158,9 @@ const MasterFormulationsPage: React.FC = () => {
         await handleSaveComposition();
         
         const compositionText = composition.map(c => `- ${c.ingredient}: ${c.amount}`).join('\n');
+        
         const subject = `Nueva Fórmula Magistral - ${patientName}`;
-        const body = `Solicitud de Fórmula Magistral:\n\nDATOS DEL PACIENTE:\nNombre: ${patientName}\nDNI/NIE: ${patientDni}\nTeléfono: ${phone}\n\nDATOS DEL MÉDICO:\nDoctor: ${doctorName}\nNº Colegiado: ${doctorCollegiateNumber}\n\nCOMPOSICIÓN DETECTADA:\n${compositionText || 'No detectada.'}\n\nNOTAS:\n${notes}`;
+        const body = `Solicitud de Fórmula Magistral:\n\nDATOS DEL PACIENTE:\nNombre: ${patientName}\nDNI/NIE: ${patientDni}\nTeléfono: ${phone}\n\nDATOS DEL MÉDICO:\nDoctor: ${doctorName}\nNº Colegiado: ${doctorCollegiateNumber}\n\nCOMPOSICIÓN DETECTADA:\n${compositionText || 'No se ha detectado composición automáticamente.'}\n\nNOTAS ADICIONALES:\n${notes}`;
 
         const mailtoLink = `mailto:laboratorio@robertovalerofarmacia.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
@@ -171,11 +174,14 @@ const MasterFormulationsPage: React.FC = () => {
     if (submitSuccess) {
         return (
             <div className="p-6 text-center">
-                <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-lg">
+                <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-lg" role="alert">
                     <p className="font-bold">Solicitud Generada</p>
-                    <p>Por favor, recuerda adjuntar la foto de la receta en tu correo.</p>
+                    <p>Se ha abierto tu aplicación de correo. Por favor, <strong>adjunta la foto de la receta</strong> y envía el correo.</p>
                 </div>
-                <button onClick={() => setSubmitSuccess(false)} className="mt-6 text-brand-green font-medium underline">
+                <button 
+                    onClick={() => setSubmitSuccess(false)}
+                    className="mt-6 text-brand-green font-medium underline"
+                >
                     Volver al formulario
                 </button>
             </div>
@@ -206,7 +212,7 @@ const MasterFormulationsPage: React.FC = () => {
                                         <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
                                     </svg>
                                     <div className="flex text-sm text-gray-600 justify-center">
-                                        <button type="button" onClick={() => fileInputRef.current?.click()} className="relative cursor-pointer bg-white rounded-md font-medium text-brand-green">
+                                        <button type="button" onClick={() => fileInputRef.current?.click()} className="relative cursor-pointer bg-white rounded-md font-medium text-brand-green hover:text-brand-dark">
                                             <span>Sube una foto</span>
                                             <input ref={fileInputRef} id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} accept="image/*,.pdf"/>
                                         </button>
@@ -220,13 +226,18 @@ const MasterFormulationsPage: React.FC = () => {
 
                 {composition.length > 0 && (
                     <div className="bg-white border border-brand-green border-opacity-30 rounded-lg shadow-sm overflow-hidden">
-                        <button type="button" onClick={() => setShowComposition(!showComposition)} className="w-full flex justify-between items-center px-4 py-3 bg-brand-green bg-opacity-5">
+                        <button 
+                            type="button"
+                            onClick={() => setShowComposition(!showComposition)}
+                            className="w-full flex justify-between items-center px-4 py-3 bg-brand-green bg-opacity-5"
+                        >
                             <div className="flex items-center space-x-2">
                                 <BeakerIcon className="h-5 w-5 text-brand-green" />
                                 <span className="font-semibold text-brand-dark text-sm">Composición Detectada ({composition.length})</span>
                             </div>
                             <ChevronDownIcon className={`h-4 w-4 text-brand-green transform transition-transform ${showComposition ? 'rotate-180' : ''}`} />
                         </button>
+                        
                         {showComposition && (
                             <div className="p-0">
                                 <table className="min-w-full divide-y divide-gray-200">
@@ -255,16 +266,16 @@ const MasterFormulationsPage: React.FC = () => {
                     <div className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Nombre Completo</label>
-                            <input type="text" value={patientName} onChange={e => setPatientName(e.target.value)} required className="mt-1 block w-full px-3 py-2 border rounded-md"/>
+                            <input type="text" value={patientName} onChange={e => setPatientName(e.target.value)} required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-brand-green focus:border-brand-green"/>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">DNI/NIE</label>
-                                <input type="text" value={patientDni} onChange={e => setPatientDni(e.target.value)} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
+                                <input type="text" value={patientDni} onChange={e => setPatientDni(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-brand-green focus:border-brand-green"/>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Teléfono</label>
-                                <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} required className="mt-1 block w-full px-3 py-2 border rounded-md"/>
+                                <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-brand-green focus:border-brand-green"/>
                             </div>
                         </div>
                     </div>
@@ -275,21 +286,21 @@ const MasterFormulationsPage: React.FC = () => {
                     <div className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Nombre del Médico</label>
-                            <input type="text" value={doctorName} onChange={e => setDoctorName(e.target.value)} required className="mt-1 block w-full px-3 py-2 border rounded-md"/>
+                            <input type="text" value={doctorName} onChange={e => setDoctorName(e.target.value)} required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-brand-green focus:border-brand-green"/>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Número de Colegiado</label>
-                            <input type="text" value={doctorCollegiateNumber} onChange={e => setDoctorCollegiateNumber(e.target.value)} className="mt-1 block w-full px-3 py-2 border rounded-md"/>
+                            <input type="text" value={doctorCollegiateNumber} onChange={e => setDoctorCollegiateNumber(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-brand-green focus:border-brand-green"/>
                         </div>
                     </div>
                 </div>
                
                 <div>
                     <label className="block text-sm font-medium text-gray-700">Notas Adicionales</label>
-                    <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="mt-1 block w-full px-3 py-2 border rounded-md"></textarea>
+                    <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-brand-green focus:border-brand-green"></textarea>
                 </div>
                 <div>
-                    <button type="submit" disabled={isSubmitting || isAnalyzing} className="w-full flex justify-center py-2 px-4 rounded-md text-white bg-brand-green hover:bg-opacity-90 disabled:bg-gray-400 font-bold">
+                    <button type="submit" disabled={isSubmitting || isAnalyzing} className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-brand-green hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-green disabled:bg-gray-400">
                         {isSubmitting ? 'Preparando correo...' : 'Enviar Solicitud al Laboratorio'}
                     </button>
                 </div>
