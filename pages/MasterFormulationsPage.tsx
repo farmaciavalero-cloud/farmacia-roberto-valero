@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// ICONOS SVG INTEGRADOS (Para que el build no falle buscando archivos externos)
+// ICONOS SVG INTEGRADOS (Para evitar errores de "Build failed")
 const CameraIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
 );
@@ -14,7 +14,7 @@ const MasterFormulationsPage: React.FC = () => {
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
-    // Estado con los nombres exactos de tu tabla SQL
+    // Estado mapeado a tu tabla 'formulas'
     const [formData, setFormData] = useState({
         nombre_paciente: '',
         dni_paciente: '',
@@ -24,14 +24,15 @@ const MasterFormulationsPage: React.FC = () => {
         notas_adicionales: ''
     });
     
-    const fileRef = useRef<HTMLElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // OCR usando el alias gemini-flash-latest
+    // ESCÁNER: Soporta Imágenes y PDF
     const handleScan = async (file: File) => {
         setIsAnalyzing(true);
         try {
             const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
             const genAI = new GoogleGenerativeAI(apiKey);
+            // Usamos el alias estable para evitar el Error 404
             const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
             const base64Data = await new Promise<string>((resolve) => {
@@ -40,18 +41,18 @@ const MasterFormulationsPage: React.FC = () => {
                 reader.readAsDataURL(file);
             });
 
-            const prompt = `Analiza la receta médica. Devuelve solo JSON:
+            const prompt = `Analiza este documento médico (receta). Extrae la información y devuélvela en JSON:
             {
                 "p": "nombre paciente",
                 "d": "dni",
                 "m": "nombre medico",
                 "c": "colegiado",
-                "f": "formula o composicion"
+                "f": "fórmula o composición"
             }`;
 
             const result = await model.generateContent([
                 prompt,
-                { inlineData: { data: base64Data, mimeType: file.type } }
+                { inlineData: { data: base64Data, mimeType: file.type } } // Soporta PDF e imagen dinámicamente
             ]);
 
             const response = await result.response;
@@ -66,7 +67,7 @@ const MasterFormulationsPage: React.FC = () => {
                 composicion_ocr: data.f || prev.composicion_ocr
             }));
         } catch (err: any) {
-            alert("Error OCR: " + err.message);
+            alert("Error al leer el archivo: " + err.message);
         } finally {
             setIsAnalyzing(false);
         }
@@ -79,7 +80,7 @@ const MasterFormulationsPage: React.FC = () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error("Debes iniciar sesión");
 
-            // Guardado en tabla 'formulas'
+            // Inserción exacta en tu tabla SQL
             const { error } = await supabase.from('formulas').insert([{
                 user_id: user.id,
                 nombre_paciente: formData.nombre_paciente,
@@ -92,7 +93,8 @@ const MasterFormulationsPage: React.FC = () => {
             }]);
 
             if (error) throw error;
-            alert("¡Solicitud enviada con éxito!");
+            alert("¡Solicitud enviada correctamente!");
+            setFormData({ nombre_paciente: '', dni_paciente: '', nombre_medico: '', num_colegiado: '', composicion_ocr: '', notas_adicionales: '' });
         } catch (err: any) {
             alert("Error al guardar: " + err.message);
         } finally {
@@ -102,7 +104,7 @@ const MasterFormulationsPage: React.FC = () => {
 
     return (
         <div className="bg-gray-50 min-h-screen pb-10">
-            {/* Cabecera idéntica a tu imagen */}
+            {/* CABECERA (image_12a23c.png) */}
             <div className="bg-white p-4 flex items-center shadow-sm mb-4 border-b border-gray-100">
                 <button onClick={() => window.history.back()} className="p-2 text-blue-900"><ArrowLeftIcon /></button>
                 <div className="flex-grow text-center pr-10">
@@ -113,41 +115,41 @@ const MasterFormulationsPage: React.FC = () => {
 
             <div className="px-4 max-w-lg mx-auto space-y-6">
                 <p className="text-xs text-gray-600 leading-tight font-medium">
-                    Rellena el formulario o sube una foto de la receta para <strong>autocompletar los datos</strong>.
+                    Sube una foto de la receta o un <strong>PDF</strong> para autocompletar los datos automáticamente.
                 </p>
 
-                {/* Zona de carga idéntica */}
+                {/* ZONA DE CARGA (image_12a23c.png) */}
                 <div 
-                    onClick={() => fileRef.current?.click()}
+                    onClick={() => fileInputRef.current?.click()}
                     className="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center cursor-pointer shadow-sm active:scale-95 transition-all"
                 >
                     {isAnalyzing ? (
                         <div className="flex flex-col items-center">
                             <div className="h-8 w-8 animate-spin border-4 border-blue-900 border-t-transparent rounded-full mb-2"/>
-                            <p className="text-[10px] font-bold text-gray-500 uppercase">Analizando receta...</p>
+                            <p className="text-[10px] font-bold text-gray-500 uppercase">Analizando documento...</p>
                         </div>
                     ) : (
                         <>
                             <div className="bg-gray-50 p-4 rounded-full inline-block mb-2 text-gray-400"><CameraIcon /></div>
                             <p className="text-gray-700 font-bold text-sm">Sube tu Receta Médica</p>
-                            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-tighter">PNG, JPG, PDF hasta 10MB</p>
+                            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-tighter">Imagen o PDF hasta 10MB</p>
                         </>
                     )}
                     <input 
-  type="file" 
-  ref={fileInputRef} 
-  className="hidden" 
-  accept="image/*,application/pdf" // Añadimos soporte para PDF
-  onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} 
-/>
+                        type="file" 
+                        ref={fileInputRef} 
+                        className="hidden" 
+                        accept="image/*,application/pdf" 
+                        onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} 
+                    />
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* Sección Paciente */}
+                    {/* SECCIÓN PACIENTE (image_12a23c.png) */}
                     <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-4">
                         <h3 className="text-[11px] font-black text-blue-900 uppercase border-b pb-2 tracking-widest">Datos del Paciente</h3>
                         <div className="space-y-3">
-                            <input value={formData.nombre_paciente} onChange={e => setFormData({...formData, nombre_paciente: e.target.value})} className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-sm outline-none focus:ring-1 focus:ring-blue-900" placeholder="Nombre Completo" required />
+                            <input value={formData.nombre_paciente} onChange={e => setFormData({...formData, nombre_paciente: e.target.value})} className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-sm outline-none" placeholder="Nombre Completo" required />
                             <div className="grid grid-cols-2 gap-3">
                                 <input value={formData.dni_paciente} onChange={e => setFormData({...formData, dni_paciente: e.target.value})} className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-sm outline-none" placeholder="DNI/NIE" required />
                                 <input value={formData.composicion_ocr} onChange={e => setFormData({...formData, composicion_ocr: e.target.value})} className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-sm outline-none" placeholder="Fórmula" />
@@ -155,7 +157,7 @@ const MasterFormulationsPage: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Sección Médico */}
+                    {/* SECCIÓN MÉDICO (image_12a9fa.png) */}
                     <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-4">
                         <h3 className="text-[11px] font-black text-blue-900 uppercase border-b pb-2 tracking-widest">Datos del Médico</h3>
                         <div className="space-y-3">
@@ -164,24 +166,24 @@ const MasterFormulationsPage: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Notas */}
+                    {/* SECCIÓN NOTAS (image_12a9fa.png) */}
                     <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                         <textarea 
                             value={formData.notas_adicionales} 
                             onChange={e => setFormData({...formData, notas_adicionales: e.target.value})}
                             rows={3} 
                             className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-sm outline-none"
-                            placeholder="Notas adicionales o teléfono..."
+                            placeholder="Notas adicionales o teléfono de contacto..."
                         />
                     </div>
 
-                    {/* Botón Final */}
+                    {/* BOTÓN ENVÍO (image_12a9fa.png) */}
                     <button 
                         type="submit" 
                         disabled={isSubmitting}
                         className="w-full bg-[#4a5d55] text-white py-4 rounded-xl font-black uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all disabled:opacity-50"
                     >
-                        {isSubmitting ? "Enviando..." : "Enviar Solicitud al Laboratorio"}
+                        {isSubmitting ? "ENVIANDO..." : "Enviar Solicitud al Laboratorio"}
                     </button>
                 </form>
             </div>
