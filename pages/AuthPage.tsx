@@ -20,10 +20,12 @@ const AuthPage: React.FC = () => {
         return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     };
 
+
     const validatePassword = (password: string) => {
-        const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-        return regex.test(password);
-    };
+    // Hemos ampliado la lista para incluir: ()_.:-/#& y los originales
+    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&()_.:\-\/#])[A-Za-z\d@$!%*?&()_.:\-\/#]{8,}$/;
+    return regex.test(password);
+};
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
