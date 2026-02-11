@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CameraIcon, XMarkIcon, PackageIcon, PlusIcon, PencilIcon, Loader2Icon, ArrowLeftIcon, TrashIcon } from '../components/Icons';
+import { CameraIcon, XMarkIcon, PackageIcon, PlusIcon, PencilIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
@@ -108,7 +108,7 @@ const OrdersPage: React.FC = () => {
 
     return (
         <div className="bg-gray-50 flex flex-col min-h-screen">
-            {/* CABECERA UNIFICADA: Sin cursiva y sin repetición */}
+            {/* CABECERA CORREGIDA: Sin duplicados y texto recto */}
             <div className="bg-white p-6 text-center border-b border-gray-100 shadow-sm">
                 <h1 className="text-2xl font-black text-blue-900 uppercase tracking-tighter">MIS PEDIDOS</h1>
                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">ESTADO DE TUS SOLICITUDES Y COMPRAS</p>
@@ -120,15 +120,15 @@ const OrdersPage: React.FC = () => {
                 <button onClick={() => setActiveTab('history')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === 'history' ? 'bg-gray-50 text-blue-900 shadow-inner' : 'text-gray-400'}`}>HISTORIAL</button>
             </div>
 
-            <div className="px-4 flex-grow overflow-y-auto pb-32 no-scrollbar">
+            <div className="px-4 flex-grow overflow-y-auto pb-40 no-scrollbar">
                 {activeTab === 'new' ? (
                     <div className="space-y-6">
                         {/* ZONA DE ESCÁNER */}
                         <div onClick={() => fileInputRef.current?.click()} className="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center cursor-pointer shadow-sm active:scale-95 transition-all">
                             {isAnalyzing ? (
-                                <div className="flex flex-col items-center"><Loader2Icon className="h-8 w-8 animate-spin text-blue-900 mb-2"/><p className="text-[10px] font-bold text-gray-500 uppercase">Analizando...</p></div>
+                                <div className="flex flex-col items-center"><div className="h-8 w-8 animate-spin border-4 border-blue-900 border-t-transparent rounded-full mb-2"/><p className="text-[10px] font-bold text-gray-500 uppercase">Analizando...</p></div>
                             ) : (
-                                <><div className="bg-gray-50 p-4 rounded-full inline-block mb-2 text-gray-400"><CameraIcon className="h-8 w-8" /></div><p className="text-gray-700 font-bold text-sm">Escanea tu receta o lista</p><p className="text-[10px] text-gray-400 uppercase font-bold tracking-tighter">Imagen o PDF hasta 10MB</p></>
+                                <><div className="bg-gray-50 p-4 rounded-full inline-block mb-2 text-gray-400"><CameraIcon className="h-8 w-8" /></div><p className="text-gray-700 font-bold text-sm">Escanea tu receta o lista</p><p className="text-[10px] text-gray-400 uppercase font-bold tracking-tighter">IMAGEN O PDF HASTA 10MB</p></>
                             )}
                             <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} />
                         </div>
@@ -143,7 +143,7 @@ const OrdersPage: React.FC = () => {
                                 {products.map((p) => (
                                     <div key={p.id} className="bg-gray-50 p-4 rounded-xl flex justify-between items-center border border-gray-100">
                                         <span className="text-sm font-bold text-blue-900 uppercase">{p.name} <span className="text-gray-400 font-normal ml-1 lowercase">{p.dosage}</span></span>
-                                        <button onClick={() => setProducts(products.filter(i => i.id !== p.id))} className="text-gray-300"><TrashIcon className="h-5 w-5" /></button>
+                                        <button onClick={() => setProducts(products.filter(i => i.id !== p.id))} className="text-gray-300"><XMarkIcon className="h-5 w-5" /></button>
                                     </div>
                                 ))}
                                 <div className="flex gap-2 pt-2">
@@ -158,7 +158,7 @@ const OrdersPage: React.FC = () => {
                         {loadingHistory ? (
                             <div className="text-center py-10 text-gray-500 text-[10px] font-bold uppercase animate-pulse">Cargando...</div>
                         ) : history.length === 0 ? (
-                            <div className="text-center py-20 bg-white rounded-2xl border border-gray-100 text-gray-400 font-bold text-[10px] uppercase">Sin pedidos.</div>
+                            <div className="text-center py-20 bg-white rounded-2xl border border-gray-100 text-gray-400 font-bold text-[10px] uppercase">Sin pedidos realizados.</div>
                         ) : (
                             history.map((order) => (
                                 <div key={order.id} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
@@ -170,7 +170,7 @@ const OrdersPage: React.FC = () => {
                                         <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
                                             order.estado === 'Pendiente' ? 'bg-yellow-50 text-yellow-600' : 
                                             order.estado === 'Listo para recoger' ? 'bg-green-50 text-green-600 animate-pulse' :
-                                            order.estado === 'Recogido' ? 'bg-gray-100 text-gray-500' : 'bg-blue-50 text-blue-600'
+                                            'bg-gray-100 text-gray-500'
                                         }`}>
                                             {order.estado}
                                         </span>
@@ -181,7 +181,7 @@ const OrdersPage: React.FC = () => {
                                         ))}
                                     </div>
                                     <button onClick={() => { setProducts(order.lista_productos); setActiveTab('new'); }} className="w-full py-2 border border-blue-900/10 rounded-lg text-[10px] font-black text-blue-900 uppercase flex items-center justify-center gap-2">
-                                        <PackageIcon className="h-4 w-4" /> Repetir encargo
+                                        <PackageIcon className="h-4 w-4" /> REPETIR ENCARGO
                                     </button>
                                 </div>
                             ))
@@ -190,10 +190,10 @@ const OrdersPage: React.FC = () => {
                 )}
             </div>
 
-            {/* PIE DE PÁGINA: Botón de confirmar y texto Bizum */}
+            {/* PIE DE PÁGINA: Botón Confirmar y Bizum */}
             {activeTab === 'new' && (
                 <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 z-20 text-center">
-                    <button onClick={handleConfirm} disabled={isSubmitting || products.length === 0} className="max-w-lg mx-auto w-full py-4 bg-[#4a5d55] text-white rounded-xl font-black uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all disabled:opacity-30 mb-4">
+                    <button onClick={handleConfirm} disabled={isSubmitting || products.length === 0} className="max-w-lg mx-auto w-full py-4 bg-[#4a5d55] text-white rounded-xl font-black uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all disabled:opacity-30 mb-3">
                         {isSubmitting ? 'PROCESANDO...' : 'Confirmar Pedido'}
                     </button>
                     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
