@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CameraIcon, XMarkIcon, PackageIcon, PlusIcon, PencilIcon } from '../components/Icons';
+import { CameraIcon, XMarkIcon, PackageIcon, PlusIcon, PencilIcon, Loader2Icon, ArrowLeftIcon, TrashIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
@@ -16,16 +16,41 @@ const OrdersPage: React.FC = () => {
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [history, setHistory] = useState<any[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // 1. ESCÁNER: Usando 'gemini-flash-latest' para evitar el error 404
+    // Cargar historial de pedidos
+    const fetchHistory = async () => {
+        setLoadingHistory(true);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            const { data, error } = await supabase
+                .from('pedidos')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('creado_el', { ascending: false });
+
+            if (error) throw error;
+            setHistory(data || []);
+        } catch (err) {
+            console.error("Error al cargar historial:", err);
+        } finally {
+            setLoadingHistory(false);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === 'history') fetchHistory();
+    }, [activeTab]);
+
     const handleScan = async (file: File) => {
         setIsAnalyzing(true);
         try {
-            const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY;
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
             const genAI = new GoogleGenerativeAI(apiKey);
-            
-            // Cambio solicitado: Utilizamos el alias más reciente de Google
             const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
             const base64Data = await new Promise<string>((resolve) => {
@@ -34,151 +59,157 @@ const OrdersPage: React.FC = () => {
                 reader.readAsDataURL(file);
             });
 
+            const prompt = "Analiza la imagen y extrae una lista de medicamentos. Devuelve EXCLUSIVAMENTE un array JSON crudo: [{\"nombre\": \"Nombre\", \"dosis\": \"Dosis\"}]";
             const result = await model.generateContent([
-                "Extrae los nombres de medicamentos y sus dosis. Devuelve SOLO un array JSON: [{\"nombre\": \"Producto\", \"dosis\": \"Dosis\"}]",
+                prompt,
                 { inlineData: { data: base64Data, mimeType: file.type } }
             ]);
 
             const response = await result.response;
-            const text = response.text().replace(/```json|```/g, "");
-            const extracted = JSON.parse(text);
-
+            const extracted = JSON.parse(response.text().replace(/```json|```/g, "").trim());
             const newItems = extracted.map((item: any) => ({
                 id: Math.random().toString(36).substr(2, 9),
                 name: item.nombre,
-                dosage: item.dosis
+                dosage: item.dosis || ''
             }));
 
-            setProducts([...newItems, ...products]);
-        } catch (err: any) {
-            console.error("Error OCR:", err);
-            alert("Error en el escáner: " + err.message);
+            setProducts([...products, ...newItems]);
+        } catch (err) {
+            alert("No se pudo leer la imagen.");
         } finally {
             setIsAnalyzing(false);
         }
     };
 
-    // 2. GUARDADO: Inserción directa en 'public.pedidos' campo 'lista_productos' (jsonb)
     const handleConfirm = async () => {
         if (products.length === 0) return;
         setIsSubmitting(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return alert("Debes iniciar sesión para realizar el encargo.");
+            if (!user) return alert("Inicia sesión.");
 
-            // Según tu esquema SQL, insertamos en 'lista_productos' el array de objetos
-            const { error: dbError } = await supabase.from('pedidos').insert([{
+            const { error } = await supabase.from('pedidos').insert([{
                 user_id: user.id,
                 lista_productos: products,
                 estado: 'Pendiente'
             }]);
 
-            if (dbError) throw dbError;
+            if (error) throw error;
             setSuccess(true);
             setProducts([]);
-        } catch (err: any) {
-            console.error("Error BD:", err);
-            alert("Error de base de datos: " + err.message);
+        } catch (err) {
+            alert("Error al guardar el pedido.");
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    const handleAddText = () => {
-        if (!inputText.trim()) return;
-        setProducts([{ id: Math.random().toString(36).substr(2, 9), name: inputText, dosage: '' }, ...products]);
-        setInputText('');
-    };
-
     if (success) {
         return (
-            <div className="p-10 text-center bg-[#0f172a] min-h-screen text-white flex flex-col items-center justify-center">
-                <div className="bg-brand-green/10 p-8 rounded-full mb-8 inline-block shadow-2xl">
-                    <PackageIcon className="h-12 w-12 text-brand-green" />
+            <div className="p-10 text-center bg-gray-50 min-h-screen flex flex-col justify-center items-center">
+                <div className="bg-green-100 p-6 rounded-full mb-6">
+                    <PackageIcon className="h-12 w-12 text-[#4a5d55]" />
                 </div>
-                <h2 className="text-xl font-bold uppercase italic mb-6 tracking-tighter">¡PEDIDO RECIBIDO!</h2>
-                <button onClick={() => setSuccess(false)} className="w-full max-w-xs py-4 bg-brand-green text-white rounded-xl font-bold uppercase tracking-widest">Aceptar</button>
+                <h2 className="text-xl font-black text-blue-900 uppercase mb-6">¡Pedido Recibido!</h2>
+                <button onClick={() => { setSuccess(false); setActiveTab('history'); }} className="w-full py-4 bg-[#4a5d55] text-white rounded-xl font-bold uppercase tracking-widest shadow-lg">Ver mis pedidos</button>
             </div>
         );
     }
 
     return (
-        <div className="bg-[#0f172a] flex flex-col h-full min-h-screen text-white">
-            <div className="text-center py-6">
-                <h1 className="text-2xl font-black italic uppercase tracking-tighter">MIS PEDIDOS</h1>
-                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Estado de tus solicitudes y compras.</p>
+        <div className="bg-gray-50 flex flex-col min-h-screen">
+            {/* CABECERA (image_c3e901.png) */}
+            <div className="bg-white p-4 flex items-center shadow-sm mb-4 border-b border-gray-100 sticky top-0 z-10">
+                <button onClick={() => window.history.back()} className="p-2 text-blue-900"><ArrowLeftIcon className="h-6 w-6" /></button>
+                <div className="flex-grow text-center pr-10">
+                    <h1 className="text-xl font-black text-blue-900 uppercase tracking-tight">Mis Pedidos</h1>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Estado de tus solicitudes y compras</p>
+                </div>
             </div>
 
-            {/* DISEÑO DE TABS ORIGINAL */}
-            <div className="flex border-b border-gray-800">
-                <button onClick={() => setActiveTab('new')} className={`flex-1 py-4 text-xs font-bold uppercase tracking-widest transition-all ${activeTab === 'new' ? 'border-b-2 border-brand-green text-gray-200' : 'text-gray-600'}`}>ENCARGAR</button>
-                <button onClick={() => setActiveTab('history')} className={`flex-1 py-4 text-xs font-bold uppercase tracking-widest transition-all ${activeTab === 'history' ? 'border-b-2 border-brand-green text-gray-200' : 'text-gray-600'}`}>HISTORIAL</button>
+            {/* SELECTOR DE PESTAÑAS */}
+            <div className="flex bg-white mx-4 rounded-xl shadow-sm border border-gray-100 p-1 mb-6">
+                <button onClick={() => setActiveTab('new')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === 'new' ? 'bg-gray-50 text-blue-900 shadow-inner' : 'text-gray-400'}`}>ENCARGAR</button>
+                <button onClick={() => setActiveTab('history')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === 'history' ? 'bg-gray-50 text-blue-900 shadow-inner' : 'text-gray-400'}`}>HISTORIAL</button>
             </div>
 
-            <div className="p-4 flex-grow overflow-y-auto">
+            <div className="px-4 flex-grow overflow-y-auto pb-24 no-scrollbar">
                 {activeTab === 'new' ? (
                     <div className="space-y-6">
-                        {/* BUSCADOR INTEGRADO CON ICONOS */}
-                        <div className="bg-[#1e293b] rounded-xl p-1 flex items-center border border-gray-800 shadow-lg">
-                            <button onClick={() => fileInputRef.current?.click()} className="p-3 text-gray-400 hover:text-brand-green transition-colors">
-                                {isAnalyzing ? <div className="animate-spin h-5 w-5 border-2 border-brand-green border-t-transparent rounded-full"/> : <CameraIcon className="h-5 w-5" />}
-                            </button>
-                            <input 
-                                type="text" 
-                                value={inputText}
-                                onChange={(e) => setInputText(e.target.value)}
-                                onKeyPress={(e) => e.key === 'Enter' && handleAddText()}
-                                placeholder="Añadir producto..." 
-                                className="bg-transparent flex-grow py-3 px-2 text-sm focus:outline-none text-gray-300 font-medium"
-                            />
-                            <button onClick={handleAddText} className="p-3 text-gray-400 hover:text-white"><PlusIcon className="h-5 w-5" /></button>
-                            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} />
+                        {/* ZONA DE CARGA */}
+                        <div onClick={() => fileInputRef.current?.click()} className="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center cursor-pointer shadow-sm active:scale-95 transition-all">
+                            {isAnalyzing ? (
+                                <div className="flex flex-col items-center"><Loader2Icon className="h-8 w-8 animate-spin text-blue-900 mb-2"/><p className="text-[10px] font-bold text-gray-500 uppercase">Analizando...</p></div>
+                            ) : (
+                                <><div className="bg-gray-50 p-4 rounded-full inline-block mb-2 text-gray-400"><CameraIcon className="h-8 w-8" /></div><p className="text-gray-700 font-bold text-sm">Escanea tu lista o caja</p><p className="text-[10px] text-gray-400 uppercase font-bold tracking-tighter">Imagen o PDF hasta 10MB</p></>
+                            )}
+                            <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} />
                         </div>
 
-                        {/* LISTADO CON EDITAR Y BORRAR */}
-                        <div>
-                            <div className="flex justify-between items-center mb-4 px-1">
-                                <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest italic tracking-wider">TU SELECCIÓN</h3>
-                                <span className="text-[10px] font-bold text-gray-500">{products.length} ITEM</span>
+                        {/* LISTA DE PRODUCTOS */}
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+                            <div className="flex justify-between items-center border-b pb-2">
+                                <h3 className="text-[11px] font-black text-blue-900 uppercase tracking-widest">Productos</h3>
+                                <span className="text-[10px] font-bold text-gray-400 uppercase">{products.length} productos</span>
                             </div>
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                                 {products.map((p) => (
-                                    <div key={p.id} className="bg-[#1e293b] p-4 rounded-xl flex justify-between items-center border border-gray-800 shadow-md">
-                                        <div className="flex flex-col">
-                                            <span className="text-sm font-bold text-white uppercase italic tracking-tight">
-                                                {p.name} <span className="text-gray-600 font-normal ml-1 text-xs">{p.dosage}</span>
-                                            </span>
-                                        </div>
-                                        <div className="flex gap-4">
-                                            <button onClick={() => {
-                                                const n = prompt("Editar producto:", p.name);
-                                                if(n) setProducts(products.map(i => i.id === p.id ? {...i, name: n} : i));
-                                            }} className="text-gray-600 hover:text-white"><PencilIcon className="h-4 w-4" /></button>
-                                            <button onClick={() => setProducts(products.filter(i => i.id !== p.id))} className="text-gray-600 hover:text-red-500"><XMarkIcon className="h-4 w-4" /></button>
-                                        </div>
+                                    <div key={p.id} className="bg-gray-50 p-4 rounded-xl flex justify-between items-center border border-gray-100">
+                                        <span className="text-sm font-bold text-blue-900 uppercase">{p.name} <span className="text-gray-400 font-normal ml-1 lowercase">{p.dosage}</span></span>
+                                        <button onClick={() => setProducts(products.filter(i => i.id !== p.id))} className="text-gray-300"><TrashIcon className="h-5 w-5" /></button>
                                     </div>
                                 ))}
+                                <div className="flex gap-2 pt-2">
+                                    <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder="Añadir manualmente..." className="flex-grow bg-gray-50 border-gray-100 rounded-xl p-3 text-sm outline-none" />
+                                    <button onClick={() => { if(inputText) { setProducts([{id: Date.now().toString(), name: inputText, dosage: ''}, ...products]); setInputText(''); }}} className="bg-blue-900 text-white p-3 rounded-xl shadow-md"><PlusIcon className="h-5 w-5" /></button>
+                                </div>
                             </div>
-                        </div>
-
-                        {/* BOTÓN DE CONFIRMACIÓN FINAL */}
-                        <div className="pt-4 space-y-4 text-center">
-                            <button 
-                                onClick={handleConfirm} 
-                                disabled={isSubmitting || products.length === 0}
-                                className="w-full py-4 bg-[#4a5d55] text-white rounded-xl font-bold text-sm shadow-xl active:scale-[0.98] transition-all disabled:opacity-30"
-                            >
-                                {isSubmitting ? 'PROCESANDO...' : 'Confirmar Pedido'}
-                            </button>
-                            <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">
-                                SE ADMITE PAGO EN TIENDA O POR BIZUM
-                            </p>
                         </div>
                     </div>
                 ) : (
-                    <div className="text-center py-20 text-gray-600 font-bold text-[10px] uppercase tracking-widest">Cargando historial de pedidos...</div>
+                    <div className="space-y-4">
+                        {loadingHistory ? (
+                            <div className="text-center py-10 text-gray-500 text-[10px] font-bold uppercase animate-pulse">Cargando...</div>
+                        ) : history.length === 0 ? (
+                            <div className="text-center py-20 bg-white rounded-2xl border border-gray-100 text-gray-400 font-bold text-[10px] uppercase">Sin pedidos.</div>
+                        ) : (
+                            history.map((order) => (
+                                <div key={order.id} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div>
+                                            <p className="text-[10px] text-gray-400 font-bold uppercase">{new Date(order.creado_el).toLocaleDateString()}</p>
+                                            <h4 className="text-sm font-black text-blue-900 uppercase">Pedido #{order.id.slice(0, 5)}</h4>
+                                        </div>
+                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                                            order.estado === 'Pendiente' ? 'bg-yellow-50 text-yellow-600' : 
+                                            order.estado === 'Listo para recoger' ? 'bg-green-50 text-green-600 animate-pulse' :
+                                            order.estado === 'Recogido' ? 'bg-gray-100 text-gray-500' : 'bg-blue-50 text-blue-600'
+                                        }`}>
+                                            {order.estado}
+                                        </span>
+                                    </div>
+                                    <div className="space-y-1 border-t border-gray-50 pt-3 mb-4">
+                                        {order.lista_productos.slice(0, 2).map((item: any, idx: number) => (
+                                            <p key={idx} className="text-xs text-gray-500 italic">• {item.name}</p>
+                                        ))}
+                                    </div>
+                                    <button onClick={() => { setProducts(order.lista_productos); setActiveTab('new'); }} className="w-full py-2 border border-blue-900/10 rounded-lg text-[10px] font-black text-blue-900 uppercase flex items-center justify-center gap-2">
+                                        <PackageIcon className="h-4 w-4" /> Repetir encargo
+                                    </button>
+                                </div>
+                            ))
+                        )}
+                    </div>
                 )}
             </div>
+
+            {activeTab === 'new' && (
+                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 z-20">
+                    <button onClick={handleConfirm} disabled={isSubmitting || products.length === 0} className="max-w-lg mx-auto w-full py-4 bg-[#4a5d55] text-white rounded-xl font-black uppercase tracking-[0.2em] shadow-xl disabled:opacity-30">
+                        {isSubmitting ? 'PROCESANDO...' : 'Confirmar Pedido'}
+                    </button>
+                </div>
+            )}
         </div>
     );
 };
