@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CameraIcon, XMarkIcon, PackageIcon, PlusIcon, PencilIcon, Loader2Icon, ArrowLeftIcon, TrashIcon } from '../components/Icons';
+import { CameraIcon, XMarkIcon, PackageIcon, PlusIcon, PencilIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
@@ -20,23 +20,20 @@ const OrdersPage: React.FC = () => {
     const [loadingHistory, setLoadingHistory] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Cargar historial de pedidos
     const fetchHistory = async () => {
         setLoadingHistory(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
-
             const { data, error } = await supabase
                 .from('pedidos')
                 .select('*')
                 .eq('user_id', user.id)
                 .order('creado_el', { ascending: false });
-
             if (error) throw error;
             setHistory(data || []);
         } catch (err) {
-            console.error("Error al cargar historial:", err);
+            console.error("Error historial:", err);
         } finally {
             setLoadingHistory(false);
         }
@@ -49,33 +46,28 @@ const OrdersPage: React.FC = () => {
     const handleScan = async (file: File) => {
         setIsAnalyzing(true);
         try {
-            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY;
             const genAI = new GoogleGenerativeAI(apiKey);
             const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
-
             const base64Data = await new Promise<string>((resolve) => {
                 const reader = new FileReader();
                 reader.onload = () => resolve((reader.result as string).split(',')[1]);
                 reader.readAsDataURL(file);
             });
-
-            const prompt = "Analiza la imagen y extrae una lista de medicamentos. Devuelve EXCLUSIVAMENTE un array JSON crudo: [{\"nombre\": \"Nombre\", \"dosis\": \"Dosis\"}]";
             const result = await model.generateContent([
-                prompt,
+                "Extrae medicamentos. Devuelve SOLO JSON: [{\"nombre\": \"Producto\", \"dosis\": \"Dosis\"}]",
                 { inlineData: { data: base64Data, mimeType: file.type } }
             ]);
-
             const response = await result.response;
-            const extracted = JSON.parse(response.text().replace(/```json|```/g, "").trim());
+            const extracted = JSON.parse(response.text().replace(/```json|```/g, ""));
             const newItems = extracted.map((item: any) => ({
                 id: Math.random().toString(36).substr(2, 9),
                 name: item.nombre,
-                dosage: item.dosis || ''
+                dosage: item.dosis
             }));
-
-            setProducts([...products, ...newItems]);
+            setProducts([...newItems, ...products]);
         } catch (err) {
-            alert("No se pudo leer la imagen.");
+            alert("Error al leer la imagen.");
         } finally {
             setIsAnalyzing(false);
         }
@@ -87,13 +79,11 @@ const OrdersPage: React.FC = () => {
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return alert("Inicia sesión.");
-
             const { error } = await supabase.from('pedidos').insert([{
                 user_id: user.id,
                 lista_productos: products,
                 estado: 'Pendiente'
             }]);
-
             if (error) throw error;
             setSuccess(true);
             setProducts([]);
@@ -107,56 +97,50 @@ const OrdersPage: React.FC = () => {
     if (success) {
         return (
             <div className="p-10 text-center bg-gray-50 min-h-screen flex flex-col justify-center items-center">
-                <div className="bg-green-100 p-6 rounded-full mb-6">
+                <div className="bg-green-50 p-6 rounded-full mb-6 border border-green-100">
                     <PackageIcon className="h-12 w-12 text-[#4a5d55]" />
                 </div>
-                <h2 className="text-xl font-black text-blue-900 uppercase mb-6">¡Pedido Recibido!</h2>
-                <button onClick={() => { setSuccess(false); setActiveTab('history'); }} className="w-full py-4 bg-[#4a5d55] text-white rounded-xl font-bold uppercase tracking-widest shadow-lg">Ver mis pedidos</button>
+                <h2 className="text-xl font-bold text-blue-900 uppercase mb-6 tracking-tighter">¡Pedido Recibido!</h2>
+                <button onClick={() => { setSuccess(false); setActiveTab('history'); }} className="w-full py-4 bg-[#4a5d55] text-white rounded-xl font-bold uppercase tracking-widest shadow-lg">Aceptar</button>
             </div>
         );
     }
 
     return (
         <div className="bg-gray-50 flex flex-col min-h-screen">
-            {/* CABECERA (image_c3e901.png) */}
-            <div className="bg-white p-4 flex items-center shadow-sm mb-4 border-b border-gray-100 sticky top-0 z-10">
-                <button onClick={() => window.history.back()} className="p-2 text-blue-900"><ArrowLeftIcon className="h-6 w-6" /></button>
-                <div className="flex-grow text-center pr-10">
-                    <h1 className="text-xl font-black text-blue-900 uppercase tracking-tight">Mis Pedidos</h1>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Estado de tus solicitudes y compras</p>
-                </div>
+            {/* CABECERA CORREGIDA: Sin duplicados, sin cursiva */}
+            <div className="bg-white p-6 text-center border-b border-gray-100 shadow-sm">
+                <h1 className="text-2xl font-black text-blue-900 uppercase tracking-tighter">MIS PEDIDOS</h1>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Estado de tus solicitudes y compras</p>
             </div>
 
-            {/* SELECTOR DE PESTAÑAS */}
-            <div className="flex bg-white mx-4 rounded-xl shadow-sm border border-gray-100 p-1 mb-6">
+            <div className="flex bg-white mx-4 mt-6 rounded-xl shadow-sm border border-gray-100 p-1">
                 <button onClick={() => setActiveTab('new')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === 'new' ? 'bg-gray-50 text-blue-900 shadow-inner' : 'text-gray-400'}`}>ENCARGAR</button>
                 <button onClick={() => setActiveTab('history')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === 'history' ? 'bg-gray-50 text-blue-900 shadow-inner' : 'text-gray-400'}`}>HISTORIAL</button>
             </div>
 
-            <div className="px-4 flex-grow overflow-y-auto pb-24 no-scrollbar">
+            <div className="p-4 flex-grow overflow-y-auto pb-24">
                 {activeTab === 'new' ? (
                     <div className="space-y-6">
-                        {/* ZONA DE CARGA */}
                         <div onClick={() => fileInputRef.current?.click()} className="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center cursor-pointer shadow-sm active:scale-95 transition-all">
                             {isAnalyzing ? (
-                                <div className="flex flex-col items-center"><Loader2Icon className="h-8 w-8 animate-spin text-blue-900 mb-2"/><p className="text-[10px] font-bold text-gray-500 uppercase">Analizando...</p></div>
+                                <div className="flex flex-col items-center"><div className="h-8 w-8 animate-spin border-4 border-blue-900 border-t-transparent rounded-full mb-2"/><p className="text-[10px] font-bold text-gray-500 uppercase">Analizando...</p></div>
                             ) : (
-                                <><div className="bg-gray-50 p-4 rounded-full inline-block mb-2 text-gray-400"><CameraIcon className="h-8 w-8" /></div><p className="text-gray-700 font-bold text-sm">Escanea tu lista o caja</p><p className="text-[10px] text-gray-400 uppercase font-bold tracking-tighter">Imagen o PDF hasta 10MB</p></>
+                                <><div className="bg-gray-50 p-4 rounded-full inline-block mb-2 text-gray-400"><CameraIcon className="h-8 w-8" /></div><p className="text-gray-700 font-bold text-sm">Escanea tu receta o lista</p><p className="text-[10px] text-gray-400 uppercase font-bold tracking-tighter">Imagen o PDF hasta 10MB</p></>
                             )}
-                            <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} />
+                            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} />
                         </div>
 
-                        {/* LISTA DE PRODUCTOS */}
-                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                            <div className="flex justify-between items-center border-b pb-2">
-                                <h3 className="text-[11px] font-black text-blue-900 uppercase tracking-widest">Productos</h3>
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                            <div className="flex justify-between items-center mb-4 border-b pb-2">
+                                <h3 className="text-[11px] font-black text-blue-900 uppercase tracking-widest">TU SELECCIÓN</h3>
                                 <span className="text-[10px] font-bold text-gray-400 uppercase">{products.length} productos</span>
                             </div>
                             <div className="space-y-3">
                                 {products.map((p) => (
                                     <div key={p.id} className="bg-gray-50 p-4 rounded-xl flex justify-between items-center border border-gray-100">
                                         <span className="text-sm font-bold text-blue-900 uppercase">{p.name} <span className="text-gray-400 font-normal ml-1 lowercase">{p.dosage}</span></span>
-                                        <button onClick={() => setProducts(products.filter(i => i.id !== p.id))} className="text-gray-300"><TrashIcon className="h-5 w-5" /></button>
+                                        <button onClick={() => setProducts(products.filter(i => i.id !== p.id))} className="text-gray-300"><XMarkIcon className="h-5 w-5" /></button>
                                     </div>
                                 ))}
                                 <div className="flex gap-2 pt-2">
@@ -165,13 +149,19 @@ const OrdersPage: React.FC = () => {
                                 </div>
                             </div>
                         </div>
+
+                        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100">
+                            <button onClick={handleConfirm} disabled={isSubmitting || products.length === 0} className="max-w-lg mx-auto w-full py-4 bg-[#4a5d55] text-white rounded-xl font-black uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all disabled:opacity-30">
+                                {isSubmitting ? 'PROCESANDO...' : 'Confirmar Pedido'}
+                            </button>
+                        </div>
                     </div>
                 ) : (
                     <div className="space-y-4">
                         {loadingHistory ? (
-                            <div className="text-center py-10 text-gray-500 text-[10px] font-bold uppercase animate-pulse">Cargando...</div>
+                            <div className="text-center py-10 text-gray-500 text-[10px] font-bold uppercase animate-pulse">Cargando historial...</div>
                         ) : history.length === 0 ? (
-                            <div className="text-center py-20 bg-white rounded-2xl border border-gray-100 text-gray-400 font-bold text-[10px] uppercase">Sin pedidos.</div>
+                            <div className="text-center py-20 bg-white rounded-2xl border border-gray-100 text-gray-400 font-bold text-[10px] uppercase tracking-widest">No hay historial de pedidos.</div>
                         ) : (
                             history.map((order) => (
                                 <div key={order.id} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
@@ -182,7 +172,7 @@ const OrdersPage: React.FC = () => {
                                         </div>
                                         <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
                                             order.estado === 'Pendiente' ? 'bg-yellow-50 text-yellow-600' : 
-                                            order.estado === 'Listo para recoger' ? 'bg-green-50 text-green-600 animate-pulse' :
+                                            order.estado === 'Listo para recoger' ? 'bg-green-50 text-green-600 font-black animate-pulse' :
                                             order.estado === 'Recogido' ? 'bg-gray-100 text-gray-500' : 'bg-blue-50 text-blue-600'
                                         }`}>
                                             {order.estado}
@@ -190,7 +180,7 @@ const OrdersPage: React.FC = () => {
                                     </div>
                                     <div className="space-y-1 border-t border-gray-50 pt-3 mb-4">
                                         {order.lista_productos.slice(0, 2).map((item: any, idx: number) => (
-                                            <p key={idx} className="text-xs text-gray-500 italic">• {item.name}</p>
+                                            <p key={idx} className="text-xs text-gray-500 font-medium">• {item.name}</p>
                                         ))}
                                     </div>
                                     <button onClick={() => { setProducts(order.lista_productos); setActiveTab('new'); }} className="w-full py-2 border border-blue-900/10 rounded-lg text-[10px] font-black text-blue-900 uppercase flex items-center justify-center gap-2">
@@ -202,14 +192,6 @@ const OrdersPage: React.FC = () => {
                     </div>
                 )}
             </div>
-
-            {activeTab === 'new' && (
-                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 z-20">
-                    <button onClick={handleConfirm} disabled={isSubmitting || products.length === 0} className="max-w-lg mx-auto w-full py-4 bg-[#4a5d55] text-white rounded-xl font-black uppercase tracking-[0.2em] shadow-xl disabled:opacity-30">
-                        {isSubmitting ? 'PROCESANDO...' : 'Confirmar Pedido'}
-                    </button>
-                </div>
-            )}
         </div>
     );
 };
